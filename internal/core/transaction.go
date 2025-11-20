@@ -1,5 +1,11 @@
 package core
 
+import (
+	"crypto/sha256"
+	"fmt"
+	"time"
+)
+
 // 1. Phần "Ruột" (Nội dung nghiệp vụ bạn muốn gửi)
 type TxPayload struct {
 	Contract string   // Ví dụ: "khoai-token"
@@ -19,13 +25,23 @@ type Transaction struct {
 
 // 3. Hàm tạo nhanh Transaction (Helper/Constructor)
 func NewTransaction(sender []byte, contract, function string, args []string) *Transaction {
-	return &Transaction{
+	tx := &Transaction{
 		// ID và Signature sẽ được tính toán sau khi ký
-		Sender: sender,
+		Timestamp: time.Now().UnixNano(),
+		Sender:    sender,
 		Payload: TxPayload{
 			Contract: contract,
 			Function: function,
 			Args:     args,
 		},
 	}
+	tx.ID = tx.Hash()
+	return tx
+}
+
+func (tx *Transaction) Hash() []byte {
+	// Đơn giản hóa: Băm sender + timestamp + contract
+	data := fmt.Sprintf("%s%d%s%s", tx.Sender, tx.Timestamp, tx.Payload.Contract, tx.Payload.Function)
+	hash := sha256.Sum256([]byte(data))
+	return hash[:]
 }

@@ -3,39 +3,73 @@ package p2p
 import (
 	"fmt"
 	"net"
+	"sync"
 )
 
-// Chữ "P" trong Port nên viết hoa nếu sau này muốn truy cập từ ngoài,
-// nhưng để thường cũng được nếu chỉ dùng trong file này.
 type Server struct {
-	Port string
+	Port  string
+	Peers []*Peer
+	lock  sync.Mutex
 }
 
-// SỬA: Đổi newServer -> NewServer (Viết hoa chữ N)
 func NewServer(port string) *Server {
 	return &Server{
-		Port: port,
+		Port:  port,
+		Peers: []*Peer{},
 	}
 }
 
-// SỬA: Đổi start -> Start (Viết hoa chữ S)
 func (s *Server) Start() {
-	// Lưu ý: s.Port giờ đã viết hoa
 	listener, err := net.Listen("tcp", ":"+s.Port)
-
 	if err != nil {
-		panic(fmt.Sprintf("Lỗi không mở được port %s: %v", s.Port, err))
+		panic(fmt.Sprintf("❌ Không thể mở port %s: %v", s.Port, err))
 	}
-	fmt.Printf("✅ NODE ĐANG CHẠY! Đang lắng nghe tại địa chỉ: 0.0.0.0:%s\n", s.Port)
-	fmt.Println("⏳ Đang chờ ai đó kết nối...")
+
+	fmt.Printf("✅ Server đang chạy port %s. Chờ kết nối...\n", s.Port)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Printf("Lỗi kết nối: %v\n", err)
+			fmt.Printf("⚠️ Lỗi Accept: %v\n", err)
 			continue
 		}
-		fmt.Printf("🎉 Có khách mới ghé thăm từ: %s\n", conn.RemoteAddr().String())
-		conn.Close()
+		s.AddPeer(conn)
+	}
+}
+
+func (s *Server) ConnectToPeer(address string) {
+	fmt.Printf("🔌 Đang kết nối đến %s...\n", address)
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		fmt.Printf("❌ Không thể kết nối đến %s: %v\n", address, err)
+		return
+	}
+
+	s.AddPeer(conn)
+}
+
+func (s *Server) AddPeer(conn net.Conn) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	peer := NewPeer(conn)
+	s.Peers = append(s.Peers, peer)
+
+	fmt.Printf("🤝 Kết nối thành công: %s. Tổng số Peer: %d\n", conn.RemoteAddr(), len(s.Peers))
+
+	go peer.ReadLoop()
+}
+
+func (s *Server) Broadcast(msg string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	fmt.Printf("📢 Đang lan truyền tin: '%s' tới %d nodes...\n", msg, len(s.Peers))
+
+	for _, peer := range s.Peers {
+		go func(p *Peer) {
+			p.Send([]byte(msg + "\n"))
+		}(peer)
 	}
 }

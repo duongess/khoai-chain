@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -29,7 +28,9 @@ func main() {
 
 	// 2. Đọc file Config
 	fmt.Printf("📖 Đang đọc cấu hình từ: %s\n", *configFile)
-	data, err := ioutil.ReadFile(*configFile)
+
+	// [SỬA Ở ĐÂY]: Đổi ioutil.ReadFile thành os.ReadFile
+	data, err := os.ReadFile(*configFile)
 	if err != nil {
 		log.Fatal("❌ Lỗi đọc file:", err)
 	}
@@ -53,11 +54,10 @@ func main() {
 	outputPath := filepath.Join("build", outputName)
 
 	// 4. Chuẩn bị lệnh Build thần thánh
-	// -ldflags "-X main.BuiltInNodeName=..." chính là kỹ thuật tiêm biến
 	ldflags := fmt.Sprintf(
 		"-X 'main.BuiltInNodeName=%s' -X 'main.DefaultConfigPath=%s'",
 		conf.NodeName,
-		*configFile, // Tiêm chính cái đường dẫn file config đầu vào vào trong exe
+		*configFile,
 	)
 
 	fmt.Printf("🔨 Đang đúc Node: %s (Config mặc định: %s)...\n", outputName, *configFile)

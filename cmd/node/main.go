@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"khoai-chain/internal/config"
+	"khoai-chain/internal/core"
+	"khoai-chain/internal/database"
 	"khoai-chain/internal/p2p"
 	"time"
 )
@@ -40,8 +42,16 @@ func main() {
 	fmt.Printf("📂 Config File: %s\n", *configPath) // In ra để kiểm tra
 	fmt.Println("========================================")
 
-	// db := database.InitDB(conf.DBPath)
-	// defer db.Close()
+	// 1. Khởi tạo DB (Kho chứa)
+	db := database.InitDB(conf.DBPath)
+	defer db.Close()
+
+	// 2. Khởi tạo Blockchain (Bộ não quản lý)
+	// Truyền con trỏ DB vào để Blockchain dùng
+	chain := core.InitBlockchain(db)
+
+	// In ra độ cao hiện tại để kiểm tra
+	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
 
 	srv := p2p.NewServer(conf.Port)
 	go srv.Start()

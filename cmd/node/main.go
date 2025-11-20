@@ -3,33 +3,53 @@ package main
 import (
 	"flag"
 	"fmt"
+	"khoai-chain/internal/config"
 	"khoai-chain/internal/p2p"
 	"time"
 )
 
+// Các biến này sẽ được Builder điền vào lúc Build
+var (
+	BuiltInNodeName   string = "Unknown Node"
+	DefaultConfigPath string = "" // <--- THÊM BIẾN NÀY
+)
+
 func main() {
-	port := flag.String("port", "8000", "Port lắng nghe")
-	target := flag.String("connect", "", "IP node khác")
+	// 1. Flag vẫn giữ để ai thích thì override, nhưng giá trị mặc định lấy từ biến toàn cục
+	configPath := flag.String("config", DefaultConfigPath, "Đường dẫn file cấu hình")
 	flag.Parse()
 
-	srv := p2p.NewServer(*port)
-	go srv.Start()
-
-	// Nếu có target thì kết nối
-	if *target != "" {
-		time.Sleep(1 * time.Second)
-		srv.ConnectToPeer(*target)
+	// [QUAN TRỌNG] Nếu không nhập flag và cũng không có default -> Báo lỗi
+	if *configPath == "" {
+		fmt.Println("❌ Vui lòng nhập file config hoặc build lại kèm config mặc định.")
+		fmt.Println("VD: ./node -config my_config.yaml")
+		return
 	}
 
-	// [TEST PHÂN TÁN]
-	// Tạo một vòng lặp gửi tin nhắn định kỳ để xem các node có nhận được không
+	// 2. Load Config
+	// Lưu ý: Nếu DefaultConfigPath được tiêm vào, nó sẽ tự load file đó
+	conf, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Printf("❌ Không đọc được file config tại: %s\n", *configPath)
+		panic(err)
+	}
+
+	// ... (Phần còn lại giữ nguyên như cũ)
+	fmt.Println("========================================")
+	fmt.Printf("🏭 KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
+	fmt.Printf("📂 Config File: %s\n", *configPath) // In ra để kiểm tra
+	fmt.Println("========================================")
+
+	// db := database.InitDB(conf.DBPath)
+	// defer db.Close()
+
+	srv := p2p.NewServer(conf.Port)
+	go srv.Start()
+
 	go func() {
-		for {
-			time.Sleep(5 * time.Second) // Cứ 5 giây gửi 1 lần
-			if len(srv.Peers) > 0 {
-				msg := fmt.Sprintf("Chào, tôi là Node %s", *port)
-				srv.Broadcast(msg)
-			}
+		time.Sleep(2 * time.Second)
+		for _, peerAddr := range conf.Peers {
+			srv.ConnectToPeer(peerAddr)
 		}
 	}()
 

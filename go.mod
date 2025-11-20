@@ -1,6 +1,8 @@
 module khoai-chain
 
-go 1.21
+go 1.21.0
+
+toolchain go1.22.3
 
 require (
 	github.com/dgraph-io/badger/v3 v3.2103.5
@@ -19,6 +21,7 @@ require (
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
 	github.com/klauspost/compress v1.12.3 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pkg/errors v0.9.1 // indirect
 	go.opencensus.io v0.22.5 // indirect
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect

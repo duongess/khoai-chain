@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"khoai-chain/internal/config"
+	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
+	"khoai-chain/internal/examples"
 	"khoai-chain/internal/p2p"
 	"time"
 )
@@ -50,6 +52,9 @@ func main() {
 	// Truyền con trỏ DB vào để Blockchain dùng
 	chain := core.InitBlockchain(db)
 
+	contractManager := contract.NewManager(chain)
+
+	contractManager.RegisterApp(examples.NewUsageExamples())
 	// In ra độ cao hiện tại để kiểm tra
 	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
 

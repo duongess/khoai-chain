@@ -58,11 +58,6 @@ func main() {
 	// In ra độ cao hiện tại để kiểm tra
 	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
 
-	args1 := [][]byte{
-		[]byte("17321312323"),
-	}
-	contractManager.Execute([]byte("examplesgolang"), []byte("TestGet"), args1)
-
 	srv := p2p.NewServer(conf.Port, contractManager)
 	go srv.Start()
 

@@ -150,3 +150,54 @@ func (bc *Blockchain) GetBlockHashes() [][]byte {
 
 	return hashes
 }
+
+func (bc *Blockchain) GetAllBlock() []*Block {
+	var blocks []*Block
+	currentHash := bc.LastHash
+
+	for {
+		block, err := bc.GetBlock(currentHash)
+		if err != nil {
+			break
+		}
+		blocks = append(blocks, block)
+
+		if len(block.PrevBlockHash) == 0 {
+			break
+		}
+		currentHash = block.PrevBlockHash
+	}
+
+	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
+		blocks[i], blocks[j] = blocks[j], blocks[i]
+	}
+
+	return blocks
+}
+
+func (bc *Blockchain) GetBlockAffter(startHash []byte) []*Block {
+	var blocks []*Block
+	currentHash := bc.LastHash
+
+	for {
+		if string(currentHash) == string(startHash) {
+			break
+		}
+		block, err := bc.GetBlock(currentHash)
+		if err != nil {
+			break
+		}
+		blocks = append(blocks, block)
+
+		if len(block.PrevBlockHash) == 0 {
+			break
+		}
+		currentHash = block.PrevBlockHash
+	}
+
+	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
+		blocks[i], blocks[j] = blocks[j], blocks[i]
+	}
+
+	return blocks
+}

@@ -8,23 +8,23 @@ import (
 type ContractManager struct {
 	contracts map[string]SmartContract
 	router    *Router // Thêm bộ định tuyến
-	chain     *core.Blockchain
+	Chain     *core.Blockchain
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
 	return &ContractManager{
 		contracts: make(map[string]SmartContract),
 		router:    &Router{},
-		chain:     chain,
+		Chain:     chain,
 	}
 }
 
 func (cm *ContractManager) PutState(key []byte, value []byte) error {
-	return cm.chain.DB.SetData(key, value)
+	return cm.Chain.DB.SetData(key, value)
 }
 
 func (cm *ContractManager) GetState(key []byte) ([]byte, error) {
-	return cm.chain.DB.GetData(key)
+	return cm.Chain.DB.GetData(key)
 }
 
 // RegisterApp: Đăng ký App mới
@@ -62,7 +62,7 @@ func (cm *ContractManager) Execute(contractName []byte, method []byte, args [][]
 
 	// 4. ĐÀO BLOCK NGAY LẬP TỨC (Instant Mining)
 	fmt.Println("⛏️  Đang đóng gói giao dịch vào Block mới...")
-	newBlock := cm.chain.MineBlock([]*core.Transaction{tx})
+	newBlock := cm.Chain.MineBlock([]*core.Transaction{tx})
 
 	if newBlock == nil {
 		return nil, fmt.Errorf("lỗi mining")

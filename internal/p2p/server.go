@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"fmt"
+	"khoai-chain/internal/contract"
 	"net"
 	"sync"
 )
@@ -10,12 +11,15 @@ type Server struct {
 	Port  string
 	Peers []*Peer
 	lock  sync.Mutex
+
+	Contracts *contract.ContractManager
 }
 
-func NewServer(port string) *Server {
+func NewServer(port string, contracts *contract.ContractManager) *Server {
 	return &Server{
-		Port:  port,
-		Peers: []*Peer{},
+		Port:      port,
+		Peers:     []*Peer{},
+		Contracts: contracts,
 	}
 }
 
@@ -53,7 +57,7 @@ func (s *Server) AddPeer(conn net.Conn) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	peer := NewPeer(conn)
+	peer := NewPeer(conn, s.Contracts)
 	s.Peers = append(s.Peers, peer)
 
 	fmt.Printf("🤝 Kết nối thành công: %s. Tổng số Peer: %d\n", conn.RemoteAddr(), len(s.Peers))

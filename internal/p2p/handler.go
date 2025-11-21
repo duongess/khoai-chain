@@ -13,7 +13,9 @@ func HandleMessage(payload []byte, manager *contract.ContractManager) ([]byte, e
 	if err := json.Unmarshal(payload, &msg); err != nil {
 		return nil, fmt.Errorf("invalid JSON")
 	}
-	if msg.Type == "EXECUTE" {
+
+	switch msg.Type {
+	case MsgExecute:
 		// --- BƯỚC CHUYỂN ĐỔI (QUAN TRỌNG) ---
 		var argsBytes [][]byte
 		for _, arg := range msg.Args {
@@ -32,7 +34,8 @@ func HandleMessage(payload []byte, manager *contract.ContractManager) ([]byte, e
 		} else {
 			return result, nil
 		}
-	}
 
+	case MsgGetChain:
+	}
 	return nil, fmt.Errorf("unknow commant")
 }

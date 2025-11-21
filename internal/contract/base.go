@@ -8,12 +8,12 @@ import (
 
 // BaseContract: Lớp cha (cho khách hàng kế thừa)
 type BaseContract struct {
-	Name string
+	Name []byte
 	Ctx  StateContext
 }
 
 // SetName: Đặt tên cho contract
-func (b *BaseContract) SetName(n string) {
+func (b *BaseContract) SetName(n []byte) {
 	b.Name = n
 }
 
@@ -22,12 +22,12 @@ func (b *BaseContract) SetContext(ctx StateContext) {
 }
 
 // GetName: Lấy tên (Impl mặc định cho Interface)
-func (b *BaseContract) GetName() string {
+func (b *BaseContract) GetName() []byte {
 	return b.Name
 }
 
 // Save: Lưu struct bất kỳ xuống DB dưới dạng TOML
-func (b *BaseContract) Save(key string, data interface{}) error {
+func (b *BaseContract) Save(key []byte, data interface{}) error {
 	if b.Ctx == nil {
 		return fmt.Errorf("chưa kết nối Database (Ctx is nil)")
 	}
@@ -43,11 +43,11 @@ func (b *BaseContract) Save(key string, data interface{}) error {
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
 	// 3. Lưu xuống DB
-	return b.Ctx.PutState(realKey, bytesData)
+	return b.Ctx.PutState([]byte(realKey), bytesData)
 }
 
 // Get: Đọc từ DB và đổ dữ liệu vào struct (target phải là con trỏ)
-func (b *BaseContract) Get(key string, target interface{}) error {
+func (b *BaseContract) Get(key []byte, target interface{}) error {
 	if b.Ctx == nil {
 		return fmt.Errorf("chưa kết nối Database")
 	}
@@ -56,7 +56,7 @@ func (b *BaseContract) Get(key string, target interface{}) error {
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
 	// 2. Lấy dữ liệu thô từ DB
-	bytesData, err := b.Ctx.GetState(realKey)
+	bytesData, err := b.Ctx.GetState([]byte(realKey))
 	if err != nil {
 		return err // Không tìm thấy hoặc lỗi DB
 	}

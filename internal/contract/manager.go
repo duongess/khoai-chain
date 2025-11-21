@@ -19,20 +19,29 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 	}
 }
 
+func (cm *ContractManager) PutState(key []byte, value []byte) error {
+	return cm.chain.DB.SetData(key, value)
+}
+
+func (cm *ContractManager) GetState(key []byte) ([]byte, error) {
+	return cm.chain.DB.GetData(key)
+}
+
 // RegisterApp: Đăng ký App mới
 func (cm *ContractManager) RegisterApp(app SmartContract) {
 	name := app.GetName()
-	cm.contracts[name] = app
+	cm.contracts[string(name)] = app
 	fmt.Printf("📦 Đã load Smart Contract: %s\n", name)
 }
 
 // Execute: Chạy logic -> Tạo Tx -> Đào Block
-func (cm *ContractManager) Execute(contractName string, method string, args []string) ([]byte, error) {
+func (cm *ContractManager) Execute(contractName []byte, method []byte, args [][]byte) ([]byte, error) {
 	// 1. Tìm App
-	app, exists := cm.contracts[contractName]
+	app, exists := cm.contracts[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' chưa được cài đặt", contractName)
 	}
+	app.SetContext(cm)
 
 	// 2. CHẠY THỬ LOGIC (Simulation)
 	// Để xem có lỗi gì không (ví dụ: kho hết hàng, sai tham số...)

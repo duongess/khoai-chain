@@ -8,9 +8,9 @@ import (
 
 // 1. Phần "Ruột" (Nội dung nghiệp vụ bạn muốn gửi)
 type TxPayload struct {
-	Contract string   // Ví dụ: "khoai-token"
-	Function string   // Ví dụ: "transfer"
-	Args     []string // Ví dụ: ["nguyen-van-b", "100"]
+	Contract []byte   // Ví dụ: "khoai-token"
+	Function []byte   // Ví dụ: "transfer"
+	Args     [][]byte // Ví dụ: ["nguyen-van-b", "100"]
 }
 
 // 2. Phần "Vỏ" (Gói giao dịch hoàn chỉnh)
@@ -24,7 +24,7 @@ type Transaction struct {
 }
 
 // 3. Hàm tạo nhanh Transaction (Helper/Constructor)
-func NewTransaction(sender []byte, contract, function string, args []string) *Transaction {
+func NewTransaction(sender, contract, function []byte, args [][]byte) *Transaction {
 	tx := &Transaction{
 		// ID và Signature sẽ được tính toán sau khi ký
 		Timestamp: time.Now().UnixNano(),

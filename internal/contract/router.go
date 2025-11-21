@@ -13,17 +13,17 @@ type Router struct{}
 // app: Đối tượng Smart Contract (VeriCon, Coin...)
 // methodName: Tên hàm muốn gọi (VD: "NhapKho")
 // args: Tham số đầu vào
-func (r *Router) CallMethod(app interface{}, methodName string, args []string) ([]byte, error) {
+func (r *Router) CallMethod(app interface{}, methodName []byte, args [][]byte) ([]byte, error) {
 	// 1. Lấy thông tin về đối tượng App (Soi gương)
 	val := reflect.ValueOf(app)
 
 	// 2. Tìm hàm theo tên
 	// Lưu ý: Hàm phải viết Hoa chữ cái đầu (Public) mới tìm thấy
-	method := val.MethodByName(methodName)
+	method := val.MethodByName(string(methodName))
 
 	if !method.IsValid() {
 		// Thử tìm hàm viết hoa chữ đầu (nếu user lỡ gửi chữ thường)
-		method = val.MethodByName(strings.Title(methodName))
+		method = val.MethodByName(strings.Title(string(methodName)))
 		if !method.IsValid() {
 			return nil, fmt.Errorf("hàm '%s' không tồn tại trong contract", methodName)
 		}

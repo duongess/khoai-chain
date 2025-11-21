@@ -30,7 +30,7 @@ func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
 // NewGenesisBlock tạo khối đầu tiên (Khối tổ)
 func NewGenesisBlock() *Block {
 	// Tạo một giao dịch mồi
-	genesisTx := NewTransaction([]byte("System"), "KhoaiChain", "Init", []string{"Genesis"})
+	genesisTx := NewTransaction([]byte("System"), []byte("KhoaiChain"), []byte("Init"), [][]byte{[]byte("Genesis")})
 	return NewBlock([]*Transaction{genesisTx}, []byte{}, 0)
 }
 

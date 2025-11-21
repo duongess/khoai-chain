@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"khoai-chain/internal/contract"
 	"net"
@@ -37,20 +38,15 @@ func (p *Peer) ReadLoop() {
 
 		fmt.Printf("📩 Nhận từ [%s]: %s", p.Conn.RemoteAddr(), msg)
 		result, err := HandleMessage(msg, p.Contracts)
+		var resp ResponseMessage
 		if err != nil {
 			fmt.Println(err)
-			errorMsg := fmt.Sprintf(`{"status":"error", "message":"%v"}`+"\n", err)
-			p.Send([]byte(errorMsg))
-			return
+			resp = ResponseMessage{Status: "Error", Error: err.Error()}
+		} else {
+			resp = ResponseMessage{Status: "Success", Result: string(result)}
 		}
 
-		if len(result) > 0 {
-			if result[len(result)-1] != '\n' {
-				result = append(result, '\n')
-			}
-		} else {
-			result = append(result, '\n')
-		}
-		p.Send(result)
+		respBytes, _ := json.Marshal(resp)
+		p.Send(append(respBytes, '\n'))
 	}
 }

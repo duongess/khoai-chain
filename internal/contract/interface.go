@@ -4,6 +4,7 @@ package contract
 type StateContext interface {
 	PutState(key []byte, value []byte) error
 	GetState(key []byte) ([]byte, error)
+	GetSender() []byte
 }
 
 // SmartContract (Giữ nguyên)

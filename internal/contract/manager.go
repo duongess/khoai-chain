@@ -6,10 +6,11 @@ import (
 )
 
 type ContractManager struct {
-	contracts map[string]SmartContract
-	router    *Router // Thêm bộ định tuyến
-	Chain     *core.Blockchain
-	Mempool   *core.Mempool
+	contracts     map[string]SmartContract
+	router        *Router // Thêm bộ định tuyến
+	Chain         *core.Blockchain
+	Mempool       *core.Mempool
+	currentSender []byte
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -29,6 +30,10 @@ func (cm *ContractManager) GetState(key []byte) ([]byte, error) {
 	return cm.Chain.DB.GetData(key)
 }
 
+func (cm *ContractManager) GetSender() []byte {
+	return cm.currentSender
+}
+
 // RegisterApp: Đăng ký App mới
 func (cm *ContractManager) RegisterApp(app SmartContract) {
 	name := app.GetName()
@@ -39,6 +44,7 @@ func (cm *ContractManager) RegisterApp(app SmartContract) {
 // Execute: Chạy logic -> Tạo Tx -> Đào Block
 func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
 	// 1. Tìm App
+	cm.currentSender = sender
 	app, exists := cm.contracts[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' chưa được cài đặt", contractName)

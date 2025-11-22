@@ -9,6 +9,7 @@ type ContractManager struct {
 	contracts map[string]SmartContract
 	router    *Router // Thêm bộ định tuyến
 	Chain     *core.Blockchain
+	Mempool   *core.Mempool
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -16,6 +17,7 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 		contracts: make(map[string]SmartContract),
 		router:    &Router{},
 		Chain:     chain,
+		Mempool:   core.NewMempool(),
 	}
 }
 
@@ -60,12 +62,15 @@ func (cm *ContractManager) Execute(contractName []byte, method []byte, args [][]
 		args,
 	)
 
-	// 4. ĐÀO BLOCK NGAY LẬP TỨC (Instant Mining)
-	fmt.Println("⛏️  Đang đóng gói giao dịch vào Block mới...")
-	newBlock := cm.Chain.MineBlock([]*core.Transaction{tx})
-
-	if newBlock == nil {
-		return nil, fmt.Errorf("lỗi mining")
+	// 4. ĐÀO BLOCK (Instant Mining)
+	fmt.Println("⛏️  Đang đóng gói giao dịch...")
+	txsToMine, ready := cm.Mempool.Add(tx)
+	if ready {
+		fmt.Printf("🚀 Đủ 10 giao dịch -> Kích hoạt ĐÀO BLOCK!\n")
+		newBlock := cm.Chain.MineBlock(txsToMine)
+		if newBlock == nil {
+			return nil, fmt.Errorf("lỗi đào block")
+		}
 	}
 
 	// Trả về kết quả thực thi của Smart Contract

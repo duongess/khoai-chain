@@ -31,6 +31,7 @@ func HandleMessage(payload []byte, manager *contract.ContractManager) ([]byte, e
 
 		// Gọi Contract
 		result, err := manager.Execute(
+			[]byte(msg.Sender),
 			[]byte(msg.Contract),
 			[]byte(msg.Function),
 			argsBytes,

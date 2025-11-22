@@ -12,6 +12,7 @@ const (
 // Request gửi qua TCP
 type CommandMessage struct {
 	Type     string   `json:"type"`
+	Sender   string   `json:"sender"`
 	Contract string   `json:"contract"`
 	Function string   `json:"function"`
 	Args     []string `json:"args"`
@@ -29,7 +30,6 @@ type SendBlocksRequest struct {
 
 // Response trả về cho Client
 type ResponseMessage struct {
-	Type   string `json:"type"`
 	Status string `json:"status"`
 	Result string `json:"result"`
 	Error  string `json:"error,omitempty"`

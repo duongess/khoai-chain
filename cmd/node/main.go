@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
-	"khoai-chain/internal/examples"
 	"khoai-chain/internal/p2p"
 	"time"
 )
@@ -57,11 +57,6 @@ func main() {
 	contractManager.RegisterApp(examples.NewUsageExamples())
 	// In ra độ cao hiện tại để kiểm tra
 	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
-
-	args1 := [][]byte{
-		[]byte("17321312323"),
-	}
-	contractManager.Execute([]byte("examplesgolang"), []byte("TestGet"), args1)
 
 	srv := p2p.NewServer(conf.Port, contractManager)
 	go srv.Start()

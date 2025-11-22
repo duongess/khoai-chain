@@ -2,7 +2,7 @@ package examples
 
 import (
 	"fmt"
-	"khoai-chain/internal/contract"
+	"khoai-chain/pkg/contract"
 )
 
 type UsageExamples struct {
@@ -29,16 +29,25 @@ func NewTest(a, b, c, d []byte) StructTest {
 }
 
 func (ue *UsageExamples) TestAdd(args [][]byte) ([]byte, error) {
+	err := ue.RequireCaller("Alice")
+	if err != nil {
+		return nil, err
+	}
 	t := NewTest(args[0], args[1], args[2], args[3])
 	// them logic
 	return nil, ue.Save(args[0], t)
 }
 
 func (ue *UsageExamples) TestGet(args [][]byte) ([]byte, error) {
+	err := ue.RequireCaller("Alice")
+	if err != nil {
+		return nil, err
+	}
+
 	var t StructTest
 
 	// 1. Lấy dữ liệu từ DB
-	err := ue.Get(args[0], &t)
+	err = ue.Get(args[0], &t)
 
 	if err != nil {
 		fmt.Printf("❌ [TestGet] Lỗi: %v\n", err)

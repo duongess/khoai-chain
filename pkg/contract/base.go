@@ -69,3 +69,13 @@ func (b *BaseContract) Get(key []byte, target interface{}) error {
 
 	return nil
 }
+
+func (b *BaseContract) RequireCaller(allowed ...string) error {
+	sender := b.Ctx.GetSender()
+	for _, p := range allowed {
+		if p == string(sender) {
+			return nil
+		}
+	}
+	return fmt.Errorf("⛔ Truy cập bị từ chối! Sender '%s' không có quyền", sender)
+}

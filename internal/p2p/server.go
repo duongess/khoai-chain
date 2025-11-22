@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"encoding/json"
 	"fmt"
 	"khoai-chain/internal/contract"
 	"net"
@@ -49,8 +50,16 @@ func (s *Server) ConnectToPeer(address string) {
 		fmt.Printf("❌ Không thể kết nối đến %s: %v\n", address, err)
 		return
 	}
-
 	s.AddPeer(conn)
+	fmt.Println("📤 Đang gửi yêu cầu đồng bộ ban đầu...")
+	hashes := s.Contracts.Chain.GetBlockHashes()
+	req := GetBlocksRequest{
+		Type:   MsgGetChain,
+		Hashes: hashes,
+	}
+	reqBytes, _ := json.Marshal(req)
+	conn.Write(append(reqBytes, '\n'))
+
 }
 
 func (s *Server) AddPeer(conn net.Conn) {

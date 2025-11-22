@@ -3,10 +3,11 @@ package contract
 import (
 	"fmt"
 	"khoai-chain/internal/core"
+	sdk "khoai-chain/pkg/contract"
 )
 
 type ContractManager struct {
-	contracts     map[string]SmartContract
+	contracts     map[string]sdk.SmartContract
 	router        *Router // Thêm bộ định tuyến
 	Chain         *core.Blockchain
 	Mempool       *core.Mempool
@@ -15,7 +16,7 @@ type ContractManager struct {
 
 func NewManager(chain *core.Blockchain) *ContractManager {
 	return &ContractManager{
-		contracts: make(map[string]SmartContract),
+		contracts: make(map[string]sdk.SmartContract),
 		router:    &Router{},
 		Chain:     chain,
 		Mempool:   core.NewMempool(),
@@ -35,7 +36,7 @@ func (cm *ContractManager) GetSender() []byte {
 }
 
 // RegisterApp: Đăng ký App mới
-func (cm *ContractManager) RegisterApp(app SmartContract) {
+func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	name := app.GetName()
 	cm.contracts[string(name)] = app
 	fmt.Printf("📦 Đã load Smart Contract: %s\n", name)

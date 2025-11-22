@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
-	"khoai-chain/internal/examples"
 	"khoai-chain/internal/p2p"
 	"time"
 )

@@ -2,7 +2,7 @@ package examples
 
 import (
 	"fmt"
-	"khoai-chain/internal/contract"
+	"khoai-chain/pkg/contract"
 )
 
 type UsageExamples struct {

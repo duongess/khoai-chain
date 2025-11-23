@@ -4,89 +4,83 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"io/fs"
-	"log"
+	"khoai-chain/pkg/cli" // Import package cli vừa tạo
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed cmd internal pkg examples go.mod go.sum
 var sourceCode embed.FS
 
-type NodeConfig struct {
-	NodeName string `yaml:"node_name"`
-}
+// ... (Các hàm support cũ giữ nguyên: NodeConfig, prepareDocker...)
 
 func main() {
-	// 1. Nhận input
-	configFile := flag.String("input", "", "File config")
-	flag.Parse()
-	if *configFile == "" {
-		log.Fatal("❌ Thiếu file config: ./khoai -input configs/node_A.yaml")
-	}
+	app := cli.NewCLI()
 
-	// 2. Đọc Config (Lấy đường dẫn tuyệt đối)
-	absConfigPath, _ := filepath.Abs(*configFile)
-	configData, err := os.ReadFile(absConfigPath)
-	if err != nil {
-		log.Fatal("❌ Lỗi đọc config:", err)
-	}
-	var conf NodeConfig
-	yaml.Unmarshal(configData, &conf)
+	// --- LỆNH 1: BUILD (Lệnh chính) ---
+	app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
+		// 1. Định nghĩa cờ RIÊNG cho lệnh build
+		buildCmd := flag.NewFlagSet("build", flag.ExitOnError)
+		configFile := buildCmd.String("input", "", "Path to config file")
 
-	// 3. TẠO "NHÀ MÁY" TẠM THỜI (Temp Dir)
-	tempDir, err := os.MkdirTemp("", "khoai_build_env_*")
-	if err != nil {
-		log.Fatal("❌ Lỗi tạo temp dir:", err)
-	}
-	defer os.RemoveAll(tempDir) // Xây xong thì đập đi cho sạch
+		// Hỗ trợ flag mảng cho -addchaincode
+		var chaincodePaths stringArray
+		buildCmd.Var(&chaincodePaths, "addchaincode", "Path to chaincode")
 
-	fmt.Println("📦 Đang giải nén source code lõi...")
-
-	// 4. BUNG FILE TỪ BỤNG EXE RA THƯ MỤC TẠM
-	fs.WalkDir(sourceCode, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
+		// 2. Parse tham số
+		if err := buildCmd.Parse(args); err != nil {
 			return err
 		}
-		destPath := filepath.Join(tempDir, path)
-		if d.IsDir() {
-			os.MkdirAll(destPath, 0755)
-			return nil
+
+		if *configFile == "" {
+			return fmt.Errorf("missing input config. Usage: -input <path>")
 		}
-		// Đọc file từ bộ nhớ embed
-		content, _ := sourceCode.ReadFile(path)
-		// Ghi ra ổ cứng ảo
-		return os.WriteFile(destPath, content, 0644)
+
+		// 3. Gọi logic xử lý chính (Hàm cũ của bạn)
+		// Lưu ý: Sửa lại logic cũ để nhận tham số thay vì tự parse flag
+		runBuildProcess(*configFile, chaincodePaths)
+		return nil
 	})
 
-	// 5. TIẾN HÀNH BUILD
-	cwd, _ := os.Getwd()
-	outputName := conf.NodeName
-	if runtime.GOOS == "windows" {
-		outputName += ".exe"
+	// --- LỆNH 2: HELP ---
+	app.AddCommand("help h", "Show help message", func(args []string) error {
+		app.PrintHelp()
+		return nil
+	})
+
+	// --- LỆNH 3: VERSION ---
+	app.AddCommand("version v", "Show version info", func(args []string) error {
+		fmt.Println("Khoai Builder v1.0.0 - Docker Edition 🐳")
+		return nil
+	})
+
+	// --- LỆNH 4: CLEAN ---
+	app.AddCommand("clean c", "Remove build artifacts", func(args []string) error {
+		fmt.Println("🧹 Cleaning up build folder...")
+		os.RemoveAll("build")
+		fmt.Println("✅ Done.")
+		return nil
+	})
+
+	// KÍCH HOẠT
+	app.Run()
+}
+
+// --- HÀM LOGIC CŨ (Đã tách ra để gọn code) ---
+func runBuildProcess(configFile string, chaincodePaths []string) {
+	fmt.Printf("🚀 Starting build with config: %s\n", configFile)
+	if len(chaincodePaths) > 0 {
+		fmt.Printf("🧩 Adding chaincodes: %v\n", chaincodePaths)
 	}
 
-	os.MkdirAll(filepath.Join(cwd, "build"), 0755)
-	finalOutput := filepath.Join(cwd, "build", outputName)
+	// ... [PASTE TOÀN BỘ LOGIC XỬ LÝ DOCKER/EMBED CŨ VÀO ĐÂY] ...
+	// (Chỉ cần đổi đoạn flag.Parse() cũ thành dùng biến truyền vào là xong)
+}
 
-	fmt.Printf("🔨 Đang đúc Node: %s...\n", outputName)
+// Type hỗ trợ flag mảng (như bài trước)
+type stringArray []string
 
-	ldflags := fmt.Sprintf("-X 'main.BuiltInNodeName=%s' -X 'main.DefaultConfigPath=%s'", conf.NodeName, absConfigPath)
-
-	// Gọi lệnh go build TRONG thư mục tạm
-	cmd := exec.Command("go", "build", "-o", finalOutput, "-ldflags", ldflags, "cmd/node/main.go")
-	cmd.Dir = tempDir // <--- Quan trọng: Chuyển chỗ làm việc vào tempDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ() // Giữ nguyên môi trường (GOPATH, v.v.)
-
-	if err := cmd.Run(); err != nil {
-		log.Fatal("❌ Build thất bại:", err)
-	}
-
-	fmt.Println("✅ XONG! File chạy tại:", finalOutput)
+func (i *stringArray) String() string { return fmt.Sprint(*i) }
+func (i *stringArray) Set(value string) error {
+	*i = append(*i, value)
+	return nil
 }

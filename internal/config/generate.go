@@ -51,12 +51,7 @@ type ChaincodeConfig struct {
 }
 
 // --- LOGIC SINH FILE CONFIG RIÊNG CHO TỪNG NODE ---
-func GenerateNodeArtifacts(baseDir string, node NodeConfig, net NetworkConfig) error {
-	nodeDir := filepath.Join(baseDir, node.Name)
-	if err := os.MkdirAll(nodeDir, 0755); err != nil {
-		return err
-	}
-
+func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) error {
 	// A. Sinh file config.yaml cho node này (để nhét vào Image)
 	// Lưu ý: Trong Docker, Host thường bind là 0.0.0.0
 

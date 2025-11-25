@@ -6,6 +6,7 @@ import (
 	"khoai-chain/internal/config"
 	"khoai-chain/pkg/cli"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -41,7 +42,15 @@ func main() {
 
 		// 3. Sinh Dockerfile & Config cho từng Node
 		for _, node := range netConf.Nodes {
-			err := config.GenerateNodeArtifacts(buildDir, node, netConf)
+			nodeDir := filepath.Join(buildDir, node.Name)
+			if err := os.MkdirAll(nodeDir, 0755); err != nil {
+				return err
+			}
+			err := config.GenerateNodeArtifacts(nodeDir, node, netConf)
+			if err != nil {
+				return err
+			}
+			err = config.BuildExe(nodeDir)
 			if err != nil {
 				return err
 			}
@@ -60,9 +69,11 @@ func main() {
 	})
 
 	// build ra các file exe
-	// app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
-
-	// })
+	app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
+		// nodes, err = os.Args
+		// for _, node := range netC
+		return nil
+	})
 
 	// ... (Giữ lại các lệnh build/clean cũ nếu muốn) ...
 

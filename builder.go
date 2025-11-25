@@ -59,6 +59,11 @@ func main() {
 		return nil
 	})
 
+	// build ra các file exe
+	// app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
+
+	// })
+
 	// ... (Giữ lại các lệnh build/clean cũ nếu muốn) ...
 
 	app.Run()

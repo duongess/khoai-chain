@@ -1,86 +1,57 @@
 package main
 
 import (
-	"embed"
-	"flag"
 	"fmt"
-	"khoai-chain/pkg/cli" // Import package cli vừa tạo
+	"khoai-chain/internal/config"
+	"khoai-chain/pkg/cli"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
-
-//go:embed cmd internal pkg examples go.mod go.sum
-var sourceCode embed.FS
-
-// ... (Các hàm support cũ giữ nguyên: NodeConfig, prepareDocker...)
 
 func main() {
 	app := cli.NewCLI()
 
-	// --- LỆNH 1: BUILD (Lệnh chính) ---
-	app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
-		// 1. Định nghĩa cờ RIÊNG cho lệnh build
-		buildCmd := flag.NewFlagSet("build", flag.ExitOnError)
-		configFile := buildCmd.String("input", "", "Path to config file")
+	// --- LỆNH 1: GENERATE DOCKER ARTIFACTS ---
+	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
+		fmt.Println("🏭 Đang đọc cấu hình khoai-config.yaml...")
 
-		// Hỗ trợ flag mảng cho -addchaincode
-		var chaincodePaths stringArray
-		buildCmd.Var(&chaincodePaths, "addchaincode", "Path to chaincode")
+		// 1. Đọc file YAML
+		data, err := os.ReadFile("khoai-config.yaml")
+		if err != nil {
+			return fmt.Errorf("không tìm thấy khoai-config.yaml: %v", err)
+		}
 
-		// 2. Parse tham số
-		if err := buildCmd.Parse(args); err != nil {
+		var netConf config.NetworkConfig
+		if err := yaml.Unmarshal(data, &netConf); err != nil {
 			return err
 		}
 
-		if *configFile == "" {
-			return fmt.Errorf("missing input config. Usage: -input <path>")
+		// 2. Tạo thư mục build artifacts
+		buildDir := "build"
+		os.MkdirAll(buildDir, 0755)
+
+		// 3. Sinh Dockerfile & Config cho từng Node
+		for _, node := range netConf.Nodes {
+			err := config.GenerateNodeArtifacts(buildDir, node, netConf)
+			if err != nil {
+				return err
+			}
 		}
 
-		// 3. Gọi logic xử lý chính (Hàm cũ của bạn)
-		// Lưu ý: Sửa lại logic cũ để nhận tham số thay vì tự parse flag
-		runBuildProcess(*configFile, chaincodePaths)
+		// 4. Sinh docker-compose.yaml tổng
+		err = config.GenerateDockerCompose(buildDir, netConf)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("\n✅ XONG! File được tạo tại thư mục '%s/'\n", buildDir)
+		fmt.Println("👉 Để build image: docker compose -f build_artifacts/docker-compose.yaml build")
+		fmt.Println("👉 Để chạy test:   docker compose -f build_artifacts/docker-compose.yaml up -d")
 		return nil
 	})
 
-	// --- LỆNH 2: HELP ---
-	app.AddCommand("help h", "Show help message", func(args []string) error {
-		app.PrintHelp()
-		return nil
-	})
+	// ... (Giữ lại các lệnh build/clean cũ nếu muốn) ...
 
-	// --- LỆNH 3: VERSION ---
-	app.AddCommand("version v", "Show version info", func(args []string) error {
-		fmt.Println("Khoai Builder v1.0.0 - Docker Edition 🐳")
-		return nil
-	})
-
-	// --- LỆNH 4: CLEAN ---
-	app.AddCommand("clean c", "Remove build artifacts", func(args []string) error {
-		fmt.Println("🧹 Cleaning up build folder...")
-		os.RemoveAll("build")
-		fmt.Println("✅ Done.")
-		return nil
-	})
-
-	// KÍCH HOẠT
 	app.Run()
-}
-
-// --- HÀM LOGIC CŨ (Đã tách ra để gọn code) ---
-func runBuildProcess(configFile string, chaincodePaths []string) {
-	fmt.Printf("🚀 Starting build with config: %s\n", configFile)
-	if len(chaincodePaths) > 0 {
-		fmt.Printf("🧩 Adding chaincodes: %v\n", chaincodePaths)
-	}
-
-	// ... [PASTE TOÀN BỘ LOGIC XỬ LÝ DOCKER/EMBED CŨ VÀO ĐÂY] ...
-	// (Chỉ cần đổi đoạn flag.Parse() cũ thành dùng biến truyền vào là xong)
-}
-
-// Type hỗ trợ flag mảng (như bài trước)
-type stringArray []string
-
-func (i *stringArray) String() string { return fmt.Sprint(*i) }
-func (i *stringArray) Set(value string) error {
-	*i = append(*i, value)
-	return nil
 }

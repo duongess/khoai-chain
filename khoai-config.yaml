@@ -27,6 +27,3 @@ nodes:
     peers:
       - "node_coteccons:9001"
     chaincodes:
-      - name: nongnghiep
-        package: khoai-chain/contracts/nongnghiep
-        constructor: NewNongNghiepContract

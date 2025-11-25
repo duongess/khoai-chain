@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"khoai-chain/internal/config"
 	"khoai-chain/pkg/cli"
@@ -9,8 +10,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+//go:embed cmd internal pkg examples go.mod go.sum .env
+var sourceCode embed.FS
+
 func main() {
 	app := cli.NewCLI()
+	config.SetSourceCode(sourceCode)
 
 	// --- LỆNH 1: GENERATE DOCKER ARTIFACTS ---
 	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
@@ -29,7 +34,10 @@ func main() {
 
 		// 2. Tạo thư mục build artifacts
 		buildDir := "build"
-		os.MkdirAll(buildDir, 0755)
+		err = os.MkdirAll(buildDir, 0755)
+		if err != nil {
+			return err
+		}
 
 		// 3. Sinh Dockerfile & Config cho từng Node
 		for _, node := range netConf.Nodes {

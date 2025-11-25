@@ -1,13 +1,26 @@
 package config
 
 import (
+	"embed"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/joho/godotenv"
+	"github.com/yeka/zip"
 	"gopkg.in/yaml.v3"
 )
+
+var sourceCode embed.FS
+
+func SetSourceCode(source embed.FS) {
+	sourceCode = source
+}
 
 type NetworkConfig struct {
 	NetworkName string       `yaml:"network_name"`
@@ -66,7 +79,9 @@ func LoadConfig(filePath string) (*ConfigContent, error) {
 // --- LOGIC SINH FILE CONFIG RIÊNG CHO TỪNG NODE ---
 func GenerateNodeArtifacts(baseDir string, node NodeConfig, net NetworkConfig) error {
 	nodeDir := filepath.Join(baseDir, node.Name)
-	os.MkdirAll(nodeDir, 0755)
+	if err := os.MkdirAll(nodeDir, 0755); err != nil {
+		return err
+	}
 
 	// A. Sinh file config.yaml cho node này (để nhét vào Image)
 	// Lưu ý: Trong Docker, Host thường bind là 0.0.0.0
@@ -87,6 +102,14 @@ func GenerateNodeArtifacts(baseDir string, node NodeConfig, net NetworkConfig) e
 	}
 
 	if err := os.WriteFile(filepath.Join(nodeDir, "config.yaml"), []byte(configContent), 0644); err != nil {
+		return err
+	}
+
+	if err := generateMainFile(nodeDir, node.Chaincodes); err != nil {
+		return fmt.Errorf("lỗi sinh main.go: %v", err)
+	}
+
+	if err := ZipFiles(nodeDir, node.Chaincodes); err != nil {
 		return err
 	}
 
@@ -143,11 +166,6 @@ ENTRYPOINT ["./khoai-node", "-config", "./config.yaml"]
 		"ImageBase": net.ImageBase,
 		"NodeName":  node.Name,
 		"Port":      node.Port,
-	}
-
-	err = generateMainFile(nodeDir, node.Chaincodes)
-	if err != nil {
-		return fmt.Errorf("lỗi sinh main.go: %v", err)
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -286,4 +304,203 @@ func main() {
 	defer f.Close()
 
 	return t.Execute(f, data)
+}
+
+// Nén main.go và các smart contract vào khoai_protected.zip của từng node
+func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
+	_ = godotenv.Load()
+	password := os.Getenv("KHOAI_PASS")
+	if password == "" {
+		return fmt.Errorf("❌ Lỗi: Chưa set biến môi trường KHOAI_PASS")
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("không lấy được thư mục hiện tại: %v", err)
+	}
+
+	mainPath := filepath.Join(nodeDir, "main.go")
+	if _, err := os.Stat(mainPath); err != nil {
+		return fmt.Errorf("không tìm thấy file main.go tại %s: %v", mainPath, err)
+	}
+
+	outputPath := filepath.Join(nodeDir, "khoai_protected.zip")
+	fmt.Printf("🔒 Đang nén main + smart contracts vào '%s' với mật khẩu...\n", outputPath)
+
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("không thể tạo file zip: %v", err)
+	}
+	defer outFile.Close()
+
+	w := zip.NewWriter(outFile)
+	defer w.Close()
+
+	added := make(map[string]bool)
+
+	// 1) Nén toàn bộ source code embed (trừ main để thay thế)
+	if err := fs.WalkDir(sourceCode, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || path == "." {
+			return nil
+		}
+
+		archivePath := filepath.ToSlash(strings.TrimPrefix(path, "./"))
+		if archivePath == "cmd/node/main.go" {
+			return nil // sẽ thay bằng main generate
+		}
+		if added[archivePath] {
+			return nil
+		}
+
+		content, err := sourceCode.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		if err := addBytesToZip(w, archivePath, content, password); err != nil {
+			return err
+		}
+		added[archivePath] = true
+		return nil
+	}); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("lỗi trong quá trình nén nguồn embed: %v", err)
+	}
+
+	// 2) Thay thế cmd/node/main.go bằng file main generate cho node
+	if err := addFileToZip(w, mainPath, "cmd/node/main.go", password); err != nil {
+		return fmt.Errorf("lỗi trong quá trình nén %s: %v", mainPath, err)
+	}
+	added["cmd/node/main.go"] = true
+
+	// 3) Nén thêm các smart contract từ config (tuỳ khách hàng bổ sung)
+	seenChaincode := make(map[string]bool)
+	for _, cc := range chaincodes {
+		if cc.Package == "" {
+			continue
+		}
+
+		resolvedPath, archiveBase, err := resolveChaincodePath(cc.Package, cwd)
+		if err != nil {
+			return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
+		}
+
+		if seenChaincode[resolvedPath] {
+			continue
+		}
+		seenChaincode[resolvedPath] = true
+
+		info, err := os.Stat(resolvedPath)
+		if err != nil {
+			return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
+		}
+
+		if info.IsDir() {
+			err = filepath.WalkDir(resolvedPath, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return nil
+				}
+
+				rel, err := filepath.Rel(resolvedPath, path)
+				if err != nil {
+					return err
+				}
+
+				archivePath := filepath.ToSlash(filepath.Join(archiveBase, rel))
+				if added[archivePath] {
+					return nil
+				}
+				if err := addFileToZip(w, path, archivePath, password); err != nil {
+					return err
+				}
+				added[archivePath] = true
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
+			}
+		} else {
+			archivePath := filepath.ToSlash(archiveBase)
+			if added[archivePath] {
+				continue
+			}
+			if err := addFileToZip(w, resolvedPath, archivePath, password); err != nil {
+				return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
+			}
+			added[archivePath] = true
+		}
+	}
+
+	fmt.Println("✅ Đã nén xong thành công!")
+	return nil
+}
+
+func resolveChaincodePath(pkgPath string, rootDir string) (string, string, error) {
+	if pkgPath == "" {
+		return "", "", fmt.Errorf("đường dẫn smart contract trống")
+	}
+
+	cleaned := filepath.Clean(pkgPath)
+	modulePrefix := "khoai-chain/"
+	archiveBase := filepath.ToSlash(cleaned)
+	pathForAbs := cleaned
+
+	if strings.HasPrefix(cleaned, modulePrefix) {
+		trimmed := strings.TrimPrefix(cleaned, modulePrefix)
+		archiveBase = filepath.ToSlash(trimmed)
+		pathForAbs = trimmed
+	}
+
+	if filepath.IsAbs(cleaned) {
+		pathForAbs = cleaned
+		archiveBase = filepath.ToSlash(filepath.Base(cleaned))
+	} else if rootDir != "" {
+		pathForAbs = filepath.Join(rootDir, pathForAbs)
+	}
+
+	absPath, err := filepath.Abs(pathForAbs)
+	if err != nil {
+		return "", "", err
+	}
+
+	if archiveBase == "" {
+		archiveBase = filepath.ToSlash(filepath.Base(absPath))
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		return "", "", fmt.Errorf("không tìm thấy smart contract tại %s", absPath)
+	}
+
+	return absPath, archiveBase, nil
+}
+
+func addFileToZip(w *zip.Writer, filePath, archivePath, password string) error {
+	reader, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	writer, err := w.Encrypt(archivePath, password, zip.AES256Encryption)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, reader)
+	return err
+}
+
+func addBytesToZip(w *zip.Writer, archivePath string, data []byte, password string) error {
+	writer, err := w.Encrypt(archivePath, password, zip.AES256Encryption)
+	if err != nil {
+		return err
+	}
+
+	_, err = writer.Write(data)
+	return err
 }

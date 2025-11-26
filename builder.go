@@ -69,13 +69,36 @@ func main() {
 	})
 
 	// build ra các file exe
-	app.AddCommand("build b", "Build blockchain node (Default)", func(args []string) error {
-		// nodes, err = os.Args
-		// for _, node := range netC
+	app.AddCommand("build b", "Build the blockchain node binary from source", func(args []string) error {
+		targetDir := "."
+
+		// If user provides a specific path, use it
+		if len(args) > 0 {
+			targetDir = args[0]
+		}
+
+		fmt.Printf("🔨 Starting build process in: %s\n", targetDir)
+
+		err := config.BuildExe(targetDir)
+		if err != nil {
+			return fmt.Errorf("failed to build node: %v", err)
+		}
+
 		return nil
 	})
 
-	// ... (Giữ lại các lệnh build/clean cũ nếu muốn) ...
+	// lệnh help
+	app.AddCommand("help h", "Show help information", func(args []string) error {
+		app.PrintHelp()
+		return nil
+	})
+
+	// lenh version
+	app.AddCommand("version v", "Display version information", func(args []string) error {
+		fmt.Println("Khoai-chain CLI version 1.0.0")
+		fmt.Println("See more at: https://github.com/duongess/khoaichain-sdk")
+		return nil
+	})
 
 	app.Run()
 }

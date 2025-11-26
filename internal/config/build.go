@@ -14,14 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Giả định biến này được khai báo ở file khác hoặc dùng //go:embed
-// Nếu chưa có thì phải bỏ comment dòng dưới đây:
-// var sourceCode embed.FS
-
-// Nếu sourceCode là biến toàn cục ở file khác trong cùng package config thì OK.
-// Nếu không, ông phải truyền nó vào hàm BuildExe dưới dạng tham số.
-// Ở đây tôi sửa hàm để nhận sourceCode làm tham số cho chắc ăn.
-
 type ConfigContent struct {
 	NodeName   string            `yaml:"node_name"`
 	Host       string            `yaml:"host"`

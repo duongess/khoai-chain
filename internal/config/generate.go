@@ -85,51 +85,38 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 
 	// B. Sinh Dockerfile (Multi-stage build)
 	dockerfileTmpl := `
-# --- Stage 1: Builder ---
-FROM {{.ImageBase}} AS builder
+# --- Stage 1: Builder (Cần môi trường Go để khoai build hoạt động) ---
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
-# 1. Thiết lập môi trường
-ENV GO111MODULE=on
-ENV GOWORK=off
+# 1. Cài curl và bash để chạy lệnh cài đặt khoai
+RUN apk add --no-cache curl bash
 
-# 2. Copy toàn bộ code vào
-COPY . .
+# 2. Cài đặt Khoai CLI
+RUN curl -fsSL https://raw.githubusercontent.com/duongess/khoaichain-sdk/main/install.sh | bash
 
-# 👇 [DEBUG CỰC MẠNH] Kiểm tra xem thư mục internal có gì không?
-# Nếu lệnh này in ra "INTERNAL MISSING" hoặc danh sách rỗng -> Nguyên nhân ở đây!
-RUN echo "==============================================" && \
-    echo "📂 KIỂM TRA FILE GO.MOD:" && cat go.mod && \
-    echo "----------------------------------------------" && \
-    echo "📂 KIỂM TRA THƯ MỤC INTERNAL:" && ls -F internal/ || echo "❌ KHÔNG TÌM THẤY THƯ MỤC INTERNAL" && \
-    echo "=============================================="
+# 3. Copy file zip bảo vệ vào
+COPY ./khoai_protected.zip .
 
-# 3. Xóa rác môi trường cũ
-RUN rm -f go.work go.work.sum
-RUN rm -rf vendor/
+# 4. Chạy lệnh build (Lúc này đã có Go nên sẽ thành công)
+RUN khoai build .
 
-# 4. Copy main.go thửa riêng
-COPY ./build/{{.NodeName}}/main.go ./cmd/node/main.go
-
-# 5. Cập nhật module
-RUN go mod tidy
-
-# 6. Build (Thử build bằng đường dẫn package đầy đủ)
-# Lưu ý: Thay "khoai-chain" bằng tên module thật nếu khác
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o khoai-node ./cmd/node
-
-# --- Stage 2: Runner ---
+# --- Stage 2: Runner (Chạy ứng dụng) ---
 FROM alpine:3.19
 WORKDIR /app
-RUN apk --no-cache add ca-certificates
 
+# 5. Cài các thư viện hệ thống cần thiết
+RUN apk add --no-cache ca-certificates libc6-compat
+
+# 6. Chỉ copy file binary 'khoai-node' đã build xong từ Stage 1 sang
 COPY --from=builder /app/khoai-node .
-COPY ./build/{{.NodeName}}/config.yaml ./config.yaml 
+COPY config.yaml .
 
+# 7. Thiết lập chạy
 RUN mkdir -p /app/data
-EXPOSE {{.Port}}
+EXPOSE 9002
 
-ENTRYPOINT ["./khoai-node", "-config", "./config.yaml"]
+CMD ["./khoai-node", "run"]
 `
 	// Dữ liệu template
 	data := map[string]interface{}{
@@ -159,8 +146,8 @@ services:
 {{range .Nodes}}
   {{.Name}}:
     build:
-      context: ../  # Trỏ ra root folder chứa source code
-      dockerfile: ./build/{{.Name}}/Dockerfile
+      context: ./{{.Name}}  # Trỏ ra root folder chứa source code
+      dockerfile: Dockerfile
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:

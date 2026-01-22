@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// 1. Kết nối đến Server (Đảm bảo Server đang chạy port 9000)
-	serverAddress := "localhost:9001"
+	serverAddress := "localhost:9000"
 	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
 		fmt.Println("❌ Không kết nối được server:", err)

@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"khoai-chain/internal/config"
+	utils "khoai-chain/internal/ulits"
 	"khoai-chain/pkg/cli"
 	"os"
 	"path/filepath"
@@ -17,15 +18,20 @@ var sourceCode embed.FS
 func main() {
 	app := cli.NewCLI()
 	config.SetSourceCode(sourceCode)
+	utils.SetSourceCode(sourceCode)
 
 	// --- LỆNH 1: GENERATE DOCKER ARTIFACTS ---
 	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
 		fmt.Println("🏭 Đang đọc cấu hình khoai-config.yaml...")
 
 		// 1. Đọc file YAML
-		data, err := os.ReadFile("khoai-config.yaml")
+		filePath, err := utils.GetEnv("KHOAI_FILE_CONFIG")
 		if err != nil {
-			return fmt.Errorf("không tìm thấy khoai-config.yaml: %v", err)
+			return fmt.Errorf("❌ Lỗi: %v", err)
+		}
+		data, err := sourceCode.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("không tìm thấy .env: %v", err)
 		}
 
 		var netConf config.NetworkConfig

@@ -7,11 +7,11 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	utils "khoai-chain/internal/ulits"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/yeka/zip"
 	"gopkg.in/yaml.v3"
 )
@@ -353,17 +353,11 @@ func startNode(configPath string, isDevMode bool) {
 
 // Nén main.go và các smart contract vào khoai_protected.zip của từng node
 func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
-	envData, err := sourceCode.ReadFile(".env")
 
+	password, err := utils.GetEnv("KHOAI_PASS")
 	if err != nil {
-		return err
+		return fmt.Errorf("❌ Lỗi: Chưa set biến môi trường KHOAI_PASS")
 	}
-	myEnv, err := godotenv.Unmarshal(string(envData))
-	if err != nil {
-		return err
-	}
-
-	password := myEnv["KHOAI_PASS"]
 
 	if password == "" {
 		return fmt.Errorf("❌ Lỗi: Chưa set biến môi trường KHOAI_PASS")

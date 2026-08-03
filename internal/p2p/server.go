@@ -27,15 +27,15 @@ func NewServer(port string, contracts *contract.ContractManager) *Server {
 func (s *Server) Start() {
 	listener, err := net.Listen("tcp", ":"+s.Port)
 	if err != nil {
-		panic(fmt.Sprintf("❌ Không thể mở port %s: %v", s.Port, err))
+		panic(fmt.Sprintf("Could not open port %s: %v", s.Port, err))
 	}
 
-	fmt.Printf("✅ Server đang chạy port %s. Chờ kết nối...\n", s.Port)
+	fmt.Printf("Server running on port %s. Waiting for connections...\n", s.Port)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Printf("⚠️ Lỗi Accept: %v\n", err)
+			fmt.Printf("Accept error: %v\n", err)
 			continue
 		}
 		s.AddPeer(conn)
@@ -43,15 +43,15 @@ func (s *Server) Start() {
 }
 
 func (s *Server) ConnectToPeer(address string) {
-	fmt.Printf("🔌 Đang kết nối đến %s...\n", address)
+	fmt.Printf("Connecting to %s...\n", address)
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Printf("❌ Không thể kết nối đến %s: %v\n", address, err)
+		fmt.Printf("Can't connect to %s: %v\n", address, err)
 		return
 	}
 	s.AddPeer(conn)
-	fmt.Println("📤 Đang gửi yêu cầu đồng bộ ban đầu...")
+	fmt.Println("Sending initial sync request...")
 	hashes := s.Contracts.Chain.GetBlockHashes()
 	req := GetBlocksRequest{
 		Type:   MsgGetChain,
@@ -69,7 +69,7 @@ func (s *Server) AddPeer(conn net.Conn) {
 	peer := NewPeer(conn, s.Contracts)
 	s.Peers = append(s.Peers, peer)
 
-	fmt.Printf("🤝 Kết nối thành công: %s. Tổng số Peer: %d\n", conn.RemoteAddr(), len(s.Peers))
+	fmt.Printf("Connection successful: %s. Total Peers: %d\n", conn.RemoteAddr(), len(s.Peers))
 
 	go peer.ReadLoop()
 }
@@ -78,7 +78,7 @@ func (s *Server) Broadcast(msg string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	fmt.Printf("📢 Đang lan truyền tin: '%s' tới %d nodes...\n", msg, len(s.Peers))
+	fmt.Printf("Broadcasting message: '%s' to %d nodes...\n", msg, len(s.Peers))
 
 	for _, peer := range s.Peers {
 		go func(p *Peer) {

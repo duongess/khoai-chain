@@ -6,44 +6,44 @@ import (
 	"strings"
 )
 
-// Router chịu trách nhiệm tìm và gọi hàm bằng Reflection
+// Router is responsible for finding and calling functions using Reflection
 type Router struct{}
 
 // CallMethod
 func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][]byte) ([]byte, error) {
-	// 1. Lấy thông tin về đối tượng App (Soi gương)
+	// 1. Get information about the App object (Reflection)
 	val := reflect.ValueOf(app)
 
-	// 2. Tìm hàm theo tên
-	// Lưu ý: Hàm phải viết Hoa chữ cái đầu (Public) mới tìm thấy
+	// 2. Find function by name
+	// Note: The function must be capitalized (Public) to be found
 	method := val.MethodByName(string(methodName))
-	// kiểm tra sender
+	// check sender
 
 	if !method.IsValid() {
-		// Thử tìm hàm viết hoa chữ đầu (nếu user lỡ gửi chữ thường)
+		// Try to find the capitalized function (if the user accidentally sent lowercase)
 		method = val.MethodByName(strings.Title(string(methodName)))
 		if !method.IsValid() {
-			return nil, fmt.Errorf("hàm '%s' không tồn tại trong contract", methodName)
+			return nil, fmt.Errorf("function '%s' does not exist in the contract", methodName)
 		}
 	}
 
-	// 3. Chuẩn bị tham số để gọi hàm
-	// Quy ước: Hàm của User phải nhận vào ([]string)
+	// 3. Prepare parameters for the function call
+	// Convention: User's function must accept ([][]byte)
 	inputArgs := []reflect.Value{reflect.ValueOf(args)}
 
-	// 4. GỌI HÀM (Invoke)
+	// 4. CALL FUNCTION (Invoke)
 	results := method.Call(inputArgs)
 
-	// 5. Xử lý kết quả trả về
-	// Quy ước: Hàm của User phải trả về ([]byte, error)
+	// 5. Process the return results
+	// Convention: User's function must return ([]byte, error)
 	if len(results) < 2 {
-		return nil, fmt.Errorf("hàm phải trả về 2 giá trị: ([]byte, error)")
+		return nil, fmt.Errorf("function must return 2 values: ([]byte, error)")
 	}
 
-	// Lấy kết quả (Bytes)
+	// Get the result (Bytes)
 	resBytes := results[0].Interface().([]byte)
 
-	// Lấy lỗi (Error)
+	// Get the error (Error)
 	errObj := results[1].Interface()
 	var err error
 	if errObj != nil {

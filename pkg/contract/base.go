@@ -6,13 +6,13 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// BaseContract: Lớp cha (cho khách hàng kế thừa)
+// BaseContract: Parent class (for clients to inherit)
 type BaseContract struct {
 	Name []byte
 	Ctx  StateContext
 }
 
-// SetName: Đặt tên cho contract
+// SetName: Sets the contract name
 func (b *BaseContract) SetName(n []byte) {
 	b.Name = n
 }
@@ -21,50 +21,50 @@ func (b *BaseContract) SetContext(ctx StateContext) {
 	b.Ctx = ctx
 }
 
-// GetName: Lấy tên (Impl mặc định cho Interface)
+// GetName: Gets the name (default implementation for the Interface)
 func (b *BaseContract) GetName() []byte {
 	return b.Name
 }
 
-// Save: Lưu struct bất kỳ xuống DB dưới dạng TOML
+// Save: Saves any struct to the DB as TOML
 func (b *BaseContract) Save(key []byte, data interface{}) error {
 	if b.Ctx == nil {
-		return fmt.Errorf("chưa kết nối Database (Ctx is nil)")
+		return fmt.Errorf("not connected to Database (Ctx is nil)")
 	}
 
-	// 1. Chuyển Struct -> TOML Bytes
+	// 1. Convert Struct -> TOML Bytes
 	bytesData, err := toml.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("lỗi tạo TOML: %v", err)
+		return fmt.Errorf("error creating TOML: %v", err)
 	}
 
-	// 2. Tạo Key định danh (Namespace): "tencontract_key"
-	// VD: "vericon_kho_hang_01"
+	// 2. Create a namespace key: "contractname_key"
+	// e.g., "vericon_kho_hang_01"
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
-	// 3. Lưu xuống DB
+	// 3. Save to DB
 	return b.Ctx.PutState([]byte(realKey), bytesData)
 }
 
-// Get: Đọc từ DB và đổ dữ liệu vào struct (target phải là con trỏ)
+// Get: Reads from DB and populates a struct (target must be a pointer)
 func (b *BaseContract) Get(key []byte, target interface{}) error {
 	if b.Ctx == nil {
-		return fmt.Errorf("chưa kết nối Database")
+		return fmt.Errorf("not connected to Database")
 	}
 
-	// 1. Tạo Key định danh
+	// 1. Create namespace key
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
-	// 2. Lấy dữ liệu thô từ DB
+	// 2. Get raw data from DB
 	bytesData, err := b.Ctx.GetState([]byte(realKey))
 	if err != nil {
-		return err // Không tìm thấy hoặc lỗi DB
+		return err // Not found or DB error
 	}
 
-	// 3. Chuyển TOML Bytes -> Struct
+	// 3. Convert TOML Bytes -> Struct
 	err = toml.Unmarshal(bytesData, target)
 	if err != nil {
-		return fmt.Errorf("dữ liệu trong DB không phải chuẩn TOML: %v", err)
+		return fmt.Errorf("data in DB is not valid TOML: %v", err)
 	}
 
 	return nil
@@ -77,5 +77,5 @@ func (b *BaseContract) RequireCaller(allowed ...string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("⛔ Truy cập bị từ chối! Sender '%s' không có quyền", sender)
+	return fmt.Errorf("⛔ Access denied! Sender '%s' does not have permission", sender)
 }

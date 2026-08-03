@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	// Import các package nội bộ
+	// Import internal packages
 	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
@@ -23,7 +22,7 @@ var (
 )
 
 func main() {
-	// 1. Setup việc tìm file Config (Logic tìm cạnh file exe)
+	// 1. Setup config file discovery (logic to find it next to the exe)
 	exePath, err := os.Executable()
 	if err != nil {
 		panic(err)
@@ -31,25 +30,25 @@ func main() {
 	exeDir := filepath.Dir(exePath)
 	defaultConfigPath := filepath.Join(exeDir, "config.yaml")
 
-	// Parse Flag để lấy đường dẫn config
-	configPathFlag := flag.String("config", defaultConfigPath, "Đường dẫn file cấu hình")
+	// Parse flags to get the config path
+	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
 
-	// 2. Khởi tạo CLI
+	// 2. Initialize CLI
 	nodeCLI := cli.NewCLI()
 
-	// --- COMMAND: RUN (Dành cho Docker/Production) ---
-	// Chế độ này tôn trọng tuyệt đối đường dẫn trong file config (VD: /app/data)
-	nodeCLI.AddCommand("run", "Chạy node mode Production (Docker)", func(args []string) error {
-		fmt.Println("🐳 Mode: DOCKER / PRODUCTION")
+	// --- COMMAND: RUN (For Docker/Production) ---
+	// This mode strictly respects the path in the config file (e.g., /app/data)
+	nodeCLI.AddCommand("run", "Run node in Production (Docker) mode", func(args []string) error {
+		fmt.Println("Mode: DOCKER / PRODUCTION")
 		startNode(*configPathFlag, false)
 		return nil
 	})
 
-	// --- COMMAND: DEV (Dành cho Lập trình viên test nhanh) ---
-	// Chế độ này ép DB về nằm cạnh file exe, bất chấp config viết gì
-	nodeCLI.AddCommand("dev", "Chạy node mode Dev (DB lưu cạnh file exe)", func(args []string) error {
-		fmt.Println("🛠️  Mode: DEVELOPMENT")
+	// --- COMMAND: DEV (For quick developer testing) ---
+	// This mode forces the DB to be next to the exe, regardless of the config
+	nodeCLI.AddCommand("dev", "Run node in Dev mode (DB saved next to the exe)", func(args []string) error {
+		fmt.Println("Mode: DEVELOPMENT")
 		startNode(*configPathFlag, true)
 		return nil
 	})
@@ -61,87 +60,74 @@ func startNode(configPath string, isDevMode bool) {
 	// 1. Load Config
 	conf, err := config.LoadConfig(configPath)
 	if err != nil {
-		fmt.Printf("❌ Không đọc được file config tại: %s\n", configPath)
-		// Gợi ý đường dẫn tuyệt đối cho dễ debug
+		fmt.Printf("Could not read config file at: %s\n", configPath)
+		// Suggest absolute path for easier debugging
 		absPath, _ := filepath.Abs(configPath)
-		fmt.Printf("   (Đường dẫn tuyệt đối: %s)\n", absPath)
+		fmt.Printf("   (Absolute path: %s)\n", absPath)
 		os.Exit(1)
 	}
 
 	fmt.Println("========================================")
-	fmt.Printf("🏭 KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
-	fmt.Printf("📂 Config File: %s\n", configPath)
+	fmt.Printf("KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
+	fmt.Printf("Config File: %s\n", configPath)
 
-	// 2. XỬ LÝ ĐƯỜNG DẪN DATABASE (Logic quan trọng nhất ở đây)
+	// 2. HANDLE DATABASE PATH (Most important logic here)
 	finalDBPath := conf.DBPath
 
 	if isDevMode {
-		// LOGIC CHO DEV:
+		// LOGIC FOR DEV:
 		dbName := filepath.Base(conf.DBPath)
 
-		// Và ép nó nằm cạnh file exe
+		// And force it to be next to the exe file
 		exePath, _ := os.Executable()
 		exeDir := filepath.Dir(exePath)
 		finalDBPath = filepath.Join(exeDir, dbName)
 
-		fmt.Println("🔧 Dev Override: Ép DB về thư mục local")
+		fmt.Println("Dev Override: Forcing DB to local directory")
 	} else {
-		// LOGIC CHO DOCKER / RUN:
-		// Giữ nguyên config. Nếu config là "/app/data" thì dùng đúng như thế.
-		fmt.Println("🐳 Docker Mode: Sử dụng đường dẫn DB từ config")
+		// LOGIC FOR DOCKER / RUN:
+		// Keep the config. If config is "/app/data", use it as is.
+		fmt.Println("Docker Mode: Using DB path from config")
 	}
 
-	fmt.Printf("💾 Database Path: %s\n", finalDBPath)
+	fmt.Printf("Database Path: %s\n", finalDBPath)
 	fmt.Println("========================================")
 
-	// 3. Khởi tạo DB
+	// 3. Initialize DB
 	db := database.InitDB(finalDBPath)
-	// Lưu ý: Trong chế độ server chạy mãi mãi (select{}), defer này chỉ chạy khi tắt app (Ctrl+C)
+	// Note: In server's infinite loop mode (select{}), this defer only runs on app shutdown (Ctrl+C)
 	defer db.Close()
 
-	// 4. Khởi tạo Blockchain
+	// 4. Initialize Blockchain
 	chain := core.InitBlockchain(db)
 
-	// 5. Khởi tạo Smart Contract Manager
+	// 5. Initialize Smart Contract Manager
 	contractManager := contract.NewManager(chain)
 
-	// Đăng ký các contract mẫu (nếu cần)
+	// Register example contracts (if needed)
 	// contractManager.RegisterApp(examples.NewUsageExamples())
-	// (Hoặc dùng .Imports .Registrations từ template của bạn)
+	// (Or use .Imports .Registrations from your template)
 	contractManager.RegisterApp(examples.NewUsageExamples())
 
-	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
+	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
-	// 6. Khởi tạo P2P Server
+	// 6. Initialize P2P Server
 	srv := p2p.NewServer(conf.Port, contractManager)
 	go srv.Start()
 
-	// 7. Kết nối Peers (Sau 2s)
+	// 7. Connect to Peers (After 2s)
 	go func() {
 		time.Sleep(2 * time.Second)
 		if len(conf.Peers) > 0 {
-			fmt.Println("🌐 Danh sách Peers trong config:", conf.Peers)
+			fmt.Println("Peers list in config:", conf.Peers)
 
 			for _, peerAddr := range conf.Peers {
-				targetAddr := peerAddr
-
-				if isDevMode {
-					parts := strings.Split(peerAddr, ":")
-					// Đảm bảo đúng định dạng host:port
-					if len(parts) == 2 {
-						port := parts[1]
-
-						// Tạo địa chỉ mới trỏ về localhost
-						targetAddr = fmt.Sprintf("localhost:%s", port)
-					}
-				}
-
-				// Kết nối tới địa chỉ (đã xử lý hoặc giữ nguyên)
-				srv.ConnectToPeer(targetAddr)
+				fmt.Printf("- Connecting to peer: %s\n", peerAddr)
+				srv.ConnectToPeer(peerAddr)
 			}
 		}
 	}()
 
-	// 8. Block main thread để server chạy mãi mãi
+	// 8. Block main thread to keep the server running forever
 	select {}
 }

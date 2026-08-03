@@ -7,111 +7,111 @@ import (
 )
 
 const (
-	lastHashKey = "lh" // Key đặc biệt để lưu Hash của block mới nhất
+	lastHashKey = "lh" // Special key to store the hash of the latest block
 )
 
 type Blockchain struct {
-	LastHash []byte            // Hash của khối mới nhất (Cái đuôi)
-	DB       *database.Storage // Kết nối đến Database
+	LastHash []byte            // Hash of the latest block (the tip)
+	DB       *database.Storage // Connection to the Database
 }
 
-// InitBlockchain: Khởi tạo chuỗi.
-// Nếu DB chưa có gì -> Tạo Genesis.
-// Nếu DB có rồi -> Load LastHash lên.
+// InitBlockchain: Initializes the blockchain.
+// If DB is empty -> Create Genesis.
+// If DB exists -> Load LastHash.
 func InitBlockchain(db *database.Storage) *Blockchain {
 	var lastHash []byte
 
-	// Kiểm tra xem trong DB đã có Blockchain chưa
+	// Check if the Blockchain already exists in the DB
 	if !db.HasKey([]byte(lastHashKey)) {
-		fmt.Println("🌟 Chưa có Blockchain, đang tạo Genesis Block...")
+		fmt.Println("No existing blockchain found, creating Genesis Block...")
 
-		// 1. Tạo Genesis Block
+		// 1. Create Genesis Block
 		genesis := NewGenesisBlock()
 
-		// 2. Lưu Block vào DB (Key=Hash, Value=Serialize)
+		// 2. Save Block to DB (Key=Hash, Value=Serialized)
 		err := db.SetData(genesis.Hash, genesis.Serialize())
 		if err != nil {
-			fmt.Println("❌ Lỗi lưu Genesis:", err)
+			fmt.Println("Error saving Genesis block:", err)
 			os.Exit(1)
 		}
 
-		// 3. Lưu con trỏ LastHash
+		// 3. Save the LastHash pointer
 		err = db.SetData([]byte(lastHashKey), genesis.Hash)
 		if err != nil {
-			fmt.Println("❌ Lỗi lưu LastHash:", err)
+			fmt.Println("Error saving LastHash:", err)
 			os.Exit(1)
 		}
 
 		lastHash = genesis.Hash
 	} else {
-		// Nếu có rồi thì lấy Hash cuối cùng ra
+		// If it exists, get the last hash
 		var err error
 		lastHash, err = db.GetData([]byte(lastHashKey))
 		if err != nil {
-			fmt.Println("❌ Lỗi đọc LastHash:", err)
+			fmt.Println("Error reading LastHash:", err)
 			os.Exit(1)
 		}
-		fmt.Printf("🔄 Đã load Blockchain. LastHash: %x\n", lastHash)
+		fmt.Printf("Blockchain loaded. LastHash: %x\n", lastHash)
 	}
 
 	return &Blockchain{LastHash: lastHash, DB: db}
 }
 
-// MineBlock: Đóng gói giao dịch thành khối mới và thêm vào chuỗi
+// MineBlock: Packages transactions into a new block and adds it to the chain
 func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
-	// 1. Lấy block cuối cùng để biết Hash và Height của nó
+	// 1. Get the last block to know its Hash and Height
 	lastBlock, err := bc.GetBlock(bc.LastHash)
 	if err != nil {
-		fmt.Println("❌ Không tìm thấy block cuối:", err)
+		fmt.Println("Could not find the last block:", err)
 		return nil
 	}
 
-	// 2. Tạo Block mới (Height tăng lên 1)
+	// 2. Create a new Block (Height incremented by 1)
 	newBlock := NewBlock(txs, bc.LastHash, lastBlock.Height+1)
 
-	// 3. Lưu Block mới vào DB
+	// 3. Save the new Block to DB
 	err = bc.DB.SetData(newBlock.Hash, newBlock.Serialize())
 	if err != nil {
-		fmt.Println("❌ Lỗi lưu block mới:", err)
+		fmt.Println("Error saving new block:", err)
 		return nil
 	}
 
-	// 4. Cập nhật LastHash
+	// 4. Update LastHash
 	err = bc.DB.SetData([]byte(lastHashKey), newBlock.Hash)
 	if err != nil {
-		fmt.Println("❌ Lỗi cập nhật LastHash:", err)
+		fmt.Println("Error updating LastHash:", err)
 		return nil
 	}
 
-	// 5. Cập nhật struct trong bộ nhớ
+	// 5. Update the struct in memory
 	bc.LastHash = newBlock.Hash
 
-	fmt.Printf("⛏️  Đã đào được Block #%d [%x]\n", newBlock.Height, newBlock.Hash)
+	fmt.Printf("Mined Block #%d [%x]\n", newBlock.Height, newBlock.Hash)
 	return newBlock
 }
 
-// AddBlock: Hàm này dùng cho P2P Sync (Khi nhận Block từ thằng khác)
-// Khác với MineBlock là Block này đã có sẵn Hash và dữ liệu, chỉ cần lưu thôi
+// AddBlock: This function is for P2P Sync (when receiving a Block from another peer)
+// Unlike MineBlock, this Block already has a Hash and data, it just needs to be saved
 func (bc *Blockchain) AddBlock(block *Block) {
-	// TODO: Cần thêm logic kiểm tra hợp lệ (Validate) ở đây nữa
+	// TODO: Add validation logic here
 
 	err := bc.DB.SetData(block.Hash, block.Serialize())
 	if err != nil {
-		fmt.Println("❌ Lỗi lưu block từ peer:", err)
+		fmt.Println("Error saving block from peer:", err)
 		return
 	}
 
-	// Kiểm tra xem block này có cao hơn block hiện tại của mình không
-	// Nếu cao hơn thì cập nhật LastHash (Longest Chain Rule)
+	// Check if this block is higher than our current block
+	// If it's higher, update LastHash (Longest Chain Rule)
 	lastBlock, _ := bc.GetBlock(bc.LastHash)
 	if block.Height > lastBlock.Height {
 		bc.DB.SetData([]byte(lastHashKey), block.Hash)
 		bc.LastHash = block.Hash
-		fmt.Printf("🔗 Đã đồng bộ Block #%d từ Peer\n", block.Height)
+		fmt.Printf("Synced Block #%d from Peer\n", block.Height)
 	}
 }
 
-// GetBlock: Tìm Block theo Hash
+// GetBlock: Find a Block by its Hash
 func (bc *Blockchain) GetBlock(hash []byte) (*Block, error) {
 	data, err := bc.DB.GetData(hash)
 	if err != nil {
@@ -120,7 +120,7 @@ func (bc *Blockchain) GetBlock(hash []byte) (*Block, error) {
 	return DeserializeBlock(data), nil
 }
 
-// GetBestHeight: Lấy chiều cao cao nhất hiện tại (Phục vụ P2P handshake)
+// GetBestHeight: Get the current highest height (for P2P handshake)
 func (bc *Blockchain) GetBestHeight() int {
 	lastBlock, err := bc.GetBlock(bc.LastHash)
 	if err != nil {
@@ -129,7 +129,7 @@ func (bc *Blockchain) GetBestHeight() int {
 	return lastBlock.Height
 }
 
-// GetBlockHashes: Lấy tất cả Hash trong chuỗi (Để gửi cho thằng khác khi nó xin)
+// GetBlockHashes: Get all Hashes in the chain (to send to another peer on request)
 func (bc *Blockchain) GetBlockHashes() [][]byte {
 	var hashes [][]byte
 	currentHash := bc.LastHash
@@ -143,7 +143,7 @@ func (bc *Blockchain) GetBlockHashes() [][]byte {
 		hashes = append(hashes, block.Hash)
 
 		if len(block.PrevBlockHash) == 0 {
-			break // Đã đến Genesis Block
+			break // Reached Genesis Block
 		}
 		currentHash = block.PrevBlockHash
 	}
@@ -175,7 +175,7 @@ func (bc *Blockchain) GetAllBlock() []*Block {
 	return blocks
 }
 
-func (bc *Blockchain) GetBlockAffter(startHash []byte) []*Block {
+func (bc *Blockchain) GetBlockAfter(startHash []byte) []*Block {
 	var blocks []*Block
 	currentHash := bc.LastHash
 

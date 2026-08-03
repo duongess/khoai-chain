@@ -8,38 +8,38 @@ import (
 )
 
 func main() {
-	// 1. Kết nối đến Server (Đảm bảo Server đang chạy port 9000)
+	// 1. Connect to the Server (Ensure the Server is running on port 9000)
 	serverAddress := "localhost:9000"
 	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
-		fmt.Println("❌ Không kết nối được server:", err)
+		fmt.Println("❌ Could not connect to server:", err)
 		return
 	}
 	defer conn.Close()
 
-	fmt.Printf("✅ Đã kết nối %s. Hãy nhập JSON lệnh và nhấn Enter.\n", serverAddress)
-	fmt.Println("Ví dụ: {\"type\":\"EXECUTE\", \"contract\":\"examplesgolang\", \"function\":\"TestAdd\", \"args\":[\"a\",\"b\"]}")
+	fmt.Printf("✅ Connected to %s. Please enter a JSON command and press Enter.\n", serverAddress)
+	fmt.Println("Example: {\"type\":\"EXECUTE\", \"contract\":\"examplesgolang\", \"function\":\"TestAdd\", \"args\":[\"a\",\"b\"]}")
 	fmt.Println("---------------------------------------------------------------")
 
-	// 2. Vòng lặp: Đọc bàn phím -> Gửi -> Nhận phản hồi
+	// 2. Loop: Read from keyboard -> Send -> Receive response
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("Client > ")
 
-		// Đọc dòng bạn nhập
+		// Read the line you entered
 		if !scanner.Scan() {
 			break
 		}
 		input := scanner.Text()
 
-		// Gửi qua TCP (thêm \n để server biết hết câu)
+		// Send via TCP (add \n so the server knows the end of the message)
 		fmt.Fprintf(conn, input+"\n")
 
-		// Đọc phản hồi từ Server
+		// Read response from the Server
 		reader := bufio.NewReader(conn)
 		response, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println("❌ Mất kết nối server.")
+			fmt.Println("❌ Lost connection to server.")
 			return
 		}
 

@@ -22,25 +22,25 @@ func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
 		PrevBlockHash: prevBlockHash,
 		Height:        height,
 	}
-	// Tính hash ngay khi tạo
+	// Calculate hash upon creation
 	block.Hash = block.CalculateHash()
 	return block
 }
 
-// NewGenesisBlock tạo khối đầu tiên (Khối tổ)
+// NewGenesisBlock creates the first block (Genesis Block)
 func NewGenesisBlock() *Block {
-	// Tạo một giao dịch mồi
+	// Create a coinbase transaction
 	genesisTx := NewTransaction([]byte("System"), []byte("KhoaiChain"), []byte("Init"), [][]byte{[]byte("Genesis")})
 	return NewBlock([]*Transaction{genesisTx}, []byte{}, 0)
 }
 
 func (b *Block) CalculateHash() []byte {
-	// Nối tất cả dữ liệu lại để băm
-	// (Làm đơn giản, thực tế dùng Merkle Tree)
+	// Concatenate all data to be hashed
+	// (Simplified, a Merkle Tree would be used in practice)
 	timestamp := []byte(string(rune(b.Timestamp)))
 	headers := bytes.Join([][]byte{b.PrevBlockHash, timestamp}, []byte{})
 
-	// Cộng thêm hash của các giao dịch
+	// Add the hash of the transactions
 	for _, tx := range b.Transactions {
 		headers = bytes.Join([][]byte{headers, tx.ID}, []byte{})
 	}
@@ -49,7 +49,7 @@ func (b *Block) CalculateHash() []byte {
 	return hash[:]
 }
 
-// Serialize: Biến Block thành mảng byte (để lưu xuống DB hoặc gửi qua mạng)
+// Serialize: Converts a Block into a byte slice (for DB storage or network transfer)
 func (b *Block) Serialize() []byte {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
@@ -60,7 +60,7 @@ func (b *Block) Serialize() []byte {
 	return result.Bytes()
 }
 
-// DeserializeBlock: Biến mảng byte ngược lại thành Block
+// DeserializeBlock: Converts a byte slice back into a Block
 func DeserializeBlock(d []byte) *Block {
 	var block Block
 	decoder := gob.NewDecoder(bytes.NewReader(d))

@@ -6,7 +6,7 @@ import (
 )
 
 type Mempool struct {
-	PendingTxs map[string][]*Transaction // Gom theo Sender
+	PendingTxs map[string][]*Transaction // Group by Sender
 	mutex      sync.Mutex
 	Threshold  int
 }
@@ -14,11 +14,11 @@ type Mempool struct {
 func NewMempool() *Mempool {
 	return &Mempool{
 		PendingTxs: make(map[string][]*Transaction),
-		Threshold:  10, // Gom đủ 10 mới xả
+		Threshold:  10, // Release after collecting 10
 	}
 }
 
-// Add: Thêm vào kho, trả về (txs, true) nếu đủ điều kiện đào
+// Add: Adds to the pool, returns (txs, true) if ready to mine
 func (mp *Mempool) Add(tx *Transaction) ([]*Transaction, bool) {
 	mp.mutex.Lock()
 	defer mp.mutex.Unlock()
@@ -27,12 +27,12 @@ func (mp *Mempool) Add(tx *Transaction) ([]*Transaction, bool) {
 	mp.PendingTxs[sender] = append(mp.PendingTxs[sender], tx)
 
 	count := len(mp.PendingTxs[sender])
-	fmt.Printf("📥 Mempool: [%s] đang có %d/%d giao dịch.\n", sender, count, mp.Threshold)
+	fmt.Printf("Mempool: [%s] has %d/%d transactions.\n", sender, count, mp.Threshold)
 
 	if count >= mp.Threshold {
-		// Cắt 10 giao dịch đầu tiên ra để đào
+		// Take the first 10 transactions to mine
 		txsToMine := mp.PendingTxs[sender][:mp.Threshold]
-		// Giữ lại phần thừa (nếu có)
+		// Keep the remainder (if any)
 		mp.PendingTxs[sender] = mp.PendingTxs[sender][mp.Threshold:]
 
 		return txsToMine, true

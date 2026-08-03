@@ -28,24 +28,23 @@ func (p *Peer) ReadLoop() {
 	defer p.Conn.Close()
 	reader := bufio.NewReader(p.Conn)
 
-	for {
-		// 1. Đọc tin nhắn
+	for { // 1. Read message
 		msg, err := reader.ReadBytes('\n')
 		if err != nil {
-			fmt.Printf("❌ Peer %s đã ngắt kết nối\n", p.Conn.RemoteAddr())
+			fmt.Printf("Peer %s disconnected\n", p.Conn.RemoteAddr())
 			return
 		}
 
-		// 2. Gọi Handler
+		// 2. Call Handler
 		responseBytes, err := HandleMessage(msg, p.Contracts)
 
 		if err != nil {
-			fmt.Println("Lỗi xử lý:", err)
+			fmt.Println("Error handling message:", err)
 		}
 
-		// 3. Nếu Handler trả về dữ liệu -> Gửi đi
+		// 3. If Handler returns data -> Send it
 		if len(responseBytes) > 0 {
-			// Đảm bảo có xuống dòng
+			// Ensure newline
 			if responseBytes[len(responseBytes)-1] != '\n' {
 				responseBytes = append(responseBytes, '\n')
 			}

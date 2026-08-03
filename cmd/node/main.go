@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	// Import internal packages
@@ -41,7 +40,7 @@ func main() {
 	// --- COMMAND: RUN (For Docker/Production) ---
 	// This mode strictly respects the path in the config file (e.g., /app/data)
 	nodeCLI.AddCommand("run", "Run node in Production (Docker) mode", func(args []string) error {
-		fmt.Println("🐳 Mode: DOCKER / PRODUCTION")
+		fmt.Println("Mode: DOCKER / PRODUCTION")
 		startNode(*configPathFlag, false)
 		return nil
 	})
@@ -49,7 +48,7 @@ func main() {
 	// --- COMMAND: DEV (For quick developer testing) ---
 	// This mode forces the DB to be next to the exe, regardless of the config
 	nodeCLI.AddCommand("dev", "Run node in Dev mode (DB saved next to the exe)", func(args []string) error {
-		fmt.Println("🛠️  Mode: DEVELOPMENT")
+		fmt.Println("Mode: DEVELOPMENT")
 		startNode(*configPathFlag, true)
 		return nil
 	})
@@ -61,7 +60,7 @@ func startNode(configPath string, isDevMode bool) {
 	// 1. Load Config
 	conf, err := config.LoadConfig(configPath)
 	if err != nil {
-		fmt.Printf("❌ Could not read config file at: %s\n", configPath)
+		fmt.Printf("Could not read config file at: %s\n", configPath)
 		// Suggest absolute path for easier debugging
 		absPath, _ := filepath.Abs(configPath)
 		fmt.Printf("   (Absolute path: %s)\n", absPath)
@@ -69,8 +68,8 @@ func startNode(configPath string, isDevMode bool) {
 	}
 
 	fmt.Println("========================================")
-	fmt.Printf("🏭 KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
-	fmt.Printf("📂 Config File: %s\n", configPath)
+	fmt.Printf("KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
+	fmt.Printf("Config File: %s\n", configPath)
 
 	// 2. HANDLE DATABASE PATH (Most important logic here)
 	finalDBPath := conf.DBPath
@@ -84,14 +83,14 @@ func startNode(configPath string, isDevMode bool) {
 		exeDir := filepath.Dir(exePath)
 		finalDBPath = filepath.Join(exeDir, dbName)
 
-		fmt.Println("🔧 Dev Override: Forcing DB to local directory")
+		fmt.Println("Dev Override: Forcing DB to local directory")
 	} else {
 		// LOGIC FOR DOCKER / RUN:
 		// Keep the config. If config is "/app/data", use it as is.
-		fmt.Println("🐳 Docker Mode: Using DB path from config")
+		fmt.Println("Docker Mode: Using DB path from config")
 	}
 
-	fmt.Printf("💾 Database Path: %s\n", finalDBPath)
+	fmt.Printf("Database Path: %s\n", finalDBPath)
 	fmt.Println("========================================")
 
 	// 3. Initialize DB
@@ -110,7 +109,7 @@ func startNode(configPath string, isDevMode bool) {
 	// (Or use .Imports .Registrations from your template)
 	contractManager.RegisterApp(examples.NewUsageExamples())
 
-	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
+	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 	// 6. Initialize P2P Server
 	srv := p2p.NewServer(conf.Port, contractManager)
@@ -120,24 +119,11 @@ func startNode(configPath string, isDevMode bool) {
 	go func() {
 		time.Sleep(2 * time.Second)
 		if len(conf.Peers) > 0 {
-			fmt.Println("🌐 Peers list in config:", conf.Peers)
+			fmt.Println("Peers list in config:", conf.Peers)
 
 			for _, peerAddr := range conf.Peers {
-				targetAddr := peerAddr
-
-				if isDevMode {
-					parts := strings.Split(peerAddr, ":")
-					// Ensure correct host:port format
-					if len(parts) == 2 {
-						port := parts[1]
-
-						// Create a new address pointing to localhost
-						targetAddr = fmt.Sprintf("localhost:%s", port)
-					}
-				}
-
-				// Connect to the address (processed or original)
-				srv.ConnectToPeer(targetAddr)
+				fmt.Printf("- Connecting to peer: %s\n", peerAddr)
+				srv.ConnectToPeer(peerAddr)
 			}
 		}
 	}()

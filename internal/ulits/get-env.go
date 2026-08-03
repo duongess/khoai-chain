@@ -34,7 +34,7 @@ func GetEnv(key string) (string, error) {
 
 	val, exists := envCache[key]
 	if !exists {
-		return "", fmt.Errorf("key %s khong ton tai trong .env", key)
+		return "", fmt.Errorf("key %s does not exist in .env", key)
 	}
 
 	return val, nil

@@ -50,10 +50,10 @@ type ChaincodeConfig struct {
 	Constructor string `yaml:"constructor"`
 }
 
-// --- LOGIC SINH FILE CONFIG RIÊNG CHO TỪNG NODE ---
+// --- LOGIC TO GENERATE CONFIG FILE FOR EACH NODE ---
 func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) error {
-	// A. Sinh file config.yaml cho node này (để nhét vào Image)
-	// Lưu ý: Trong Docker, Host thường bind là 0.0.0.0
+	// A. Generate config.yaml for this node (to be included in the Image)
+	// Note: In Docker, the host is usually bound to 0.0.0.0
 
 	finalConfig := ConfigContent{
 		NodeName:   node.Name,
@@ -67,7 +67,7 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 	configContent, err := yaml.Marshal(finalConfig)
 
 	if err != nil {
-		return fmt.Errorf("lỗi marshal config: %v", err)
+		return fmt.Errorf("error marshalling config: %v", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(nodeDir, "config.yaml"), []byte(configContent), 0644); err != nil {
@@ -75,7 +75,7 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 	}
 
 	if err := generateMainFile(nodeDir, node.Chaincodes); err != nil {
-		return fmt.Errorf("lỗi sinh main.go: %v", err)
+		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
 	if err := ZipFiles(nodeDir, node.Chaincodes); err != nil {
@@ -83,42 +83,42 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 	}
 	defer os.RemoveAll(filepath.Join(nodeDir, "main.go"))
 
-	// B. Sinh Dockerfile (Multi-stage build)
+	// B. Generate Dockerfile (Multi-stage build)
 	dockerfileTmpl := `
-# --- Stage 1: Builder (Cần môi trường Go để khoai build hoạt động) ---
+# --- Stage 1: Builder (Go environment needed for khoai build to work) ---
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
-# 1. Cài curl và bash để chạy lệnh cài đặt khoai
+# 1. Install curl and bash to run the khoai installation command
 RUN apk add --no-cache curl bash
 
-# 2. Cài đặt Khoai CLI
+# 2. Install Khoai CLI
 RUN curl -fsSL https://raw.githubusercontent.com/duongess/khoaichain-sdk/main/install.sh | bash
 
-# 3. Copy file zip bảo vệ vào
+# 3. Copy the protected zip file
 COPY ./khoai_protected.zip .
 
-# 4. Chạy lệnh build (Lúc này đã có Go nên sẽ thành công)
+# 4. Run the build command (This will succeed as Go is now available)
 RUN khoai build .
 
-# --- Stage 2: Runner (Chạy ứng dụng) ---
+# --- Stage 2: Runner (Run the application) ---
 FROM alpine:3.19
 WORKDIR /app
 
-# 5. Cài các thư viện hệ thống cần thiết
+# 5. Install necessary system libraries
 RUN apk add --no-cache ca-certificates libc6-compat
 
-# 6. Chỉ copy file binary 'khoai-node' đã build xong từ Stage 1 sang
+# 6. Copy only the 'khoai-node' binary built from Stage 1
 COPY --from=builder /app/khoai-node .
 COPY config.yaml .
 
-# 7. Thiết lập chạy
+# 7. Setup for running
 RUN mkdir -p /app/data
 EXPOSE 9002
 
 CMD ["./khoai-node", "run"]
 `
-	// Dữ liệu template
+	// Template data
 	data := map[string]interface{}{
 		"ImageBase": net.ImageBase,
 		"NodeName":  node.Name,
@@ -134,7 +134,7 @@ CMD ["./khoai-node", "run"]
 	return t.Execute(f, data)
 }
 
-// --- LOGIC SINH DOCKER-COMPOSE ---
+// --- LOGIC TO GENERATE DOCKER-COMPOSE ---
 func GenerateDockerCompose(baseDir string, net NetworkConfig) error {
 	composeTmpl := `version: "3.9"
 
@@ -146,7 +146,7 @@ services:
 {{range .Nodes}}
   {{.Name}}:
     build:
-      context: ./{{.Name}}  # Trỏ ra root folder chứa source code
+      context: ./{{.Name}}  # Points to the root folder containing the source code
       dockerfile: Dockerfile
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
@@ -198,7 +198,7 @@ var (
 )
 
 func main() {
-	// 1. Setup việc tìm file Config (Logic tìm cạnh file exe)
+	// 1. Setup config file discovery (logic to find it next to the exe)
 	exePath, err := os.Executable()
 	if err != nil {
 		panic(err)
@@ -206,23 +206,23 @@ func main() {
 	exeDir := filepath.Dir(exePath)
 	defaultConfigPath := filepath.Join(exeDir, "config.yaml")
 
-	// Parse Flag để lấy đường dẫn config
-	configPathFlag := flag.String("config", defaultConfigPath, "Đường dẫn file cấu hình")
+	// Parse flags to get the config path
+	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
 
-	// 2. Khởi tạo CLI
+	// 2. Initialize CLI
 	nodeCLI := cli.NewCLI()
 
-	// --- COMMAND: RUN (Dành cho Docker/Production) ---
-	// Chế độ này tôn trọng tuyệt đối đường dẫn trong file config (VD: /app/data)
-	nodeCLI.AddCommand("run", "Chạy node mode Production (Docker)", func(args []string) error {
+	// --- COMMAND: RUN (For Docker/Production) ---
+	// This mode strictly respects the path in the config file (e.g., /app/data)
+	nodeCLI.AddCommand("run", "Run node in Production (Docker) mode", func(args []string) error {
 		fmt.Println("🐳 Mode: DOCKER / PRODUCTION")
 		startNode(*configPathFlag, false)
 		return nil
 	})
 
-	// --- COMMAND: DEV (Dành cho Lập trình viên test nhanh) ---
-	nodeCLI.AddCommand("dev", "Chạy node mode Dev (DB lưu cạnh file exe)", func(args []string) error {
+	// --- COMMAND: DEV (For quick testing by developers) ---
+	nodeCLI.AddCommand("dev", "Run node in Dev mode (DB saved next to the exe)", func(args []string) error {
 		fmt.Println("🛠️  Mode: DEVELOPMENT")
 		startNode(*configPathFlag, true)
 		return nil
@@ -235,10 +235,10 @@ func startNode(configPath string, isDevMode bool) {
 	// 1. Load Config
 	conf, err := config.LoadConfig(configPath)
 	if err != nil {
-		fmt.Printf("❌ Không đọc được file config tại: %s\n", configPath)
-		// Gợi ý đường dẫn tuyệt đối cho dễ debug
+		fmt.Printf("❌ Could not read config file at: %s\n", configPath)
+		// Suggest absolute path for easier debugging
 		absPath, _ := filepath.Abs(configPath)
-		fmt.Printf("   (Đường dẫn tuyệt đối: %s)\n", absPath)
+		fmt.Printf("   (Absolute path: %s)\n", absPath)
 		os.Exit(1)
 	}
 
@@ -246,76 +246,76 @@ func startNode(configPath string, isDevMode bool) {
 	fmt.Printf("🏭 KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
 	fmt.Printf("📂 Config File: %s\n", configPath)
 
-	// 2. XỬ LÝ ĐƯỜNG DẪN DATABASE (Logic quan trọng nhất ở đây)
+	// 2. HANDLE DATABASE PATH (Most important logic here)
 	finalDBPath := conf.DBPath
 
 	if isDevMode {
-		// LOGIC CHO DEV:
+		// LOGIC FOR DEV:
 		dbName := filepath.Base(conf.DBPath)
 
-		// Và ép nó nằm cạnh file exe
+		// And force it to be next to the exe file
 		exePath, _ := os.Executable()
 		exeDir := filepath.Dir(exePath)
 		finalDBPath = filepath.Join(exeDir, dbName)
 
-		fmt.Println("🔧 Dev Override: Ép DB về thư mục local")
+		fmt.Println("🔧 Dev Override: Forcing DB to local directory")
 	} else {
-		// LOGIC CHO DOCKER / RUN:
-		// Giữ nguyên config. Nếu config là "/app/data" thì dùng đúng như thế.
-		fmt.Println("🐳 Docker Mode: Sử dụng đường dẫn DB từ config")
+		// LOGIC FOR DOCKER / RUN:
+		// Keep the config. If config is "/app/data", use it as is.
+		fmt.Println("🐳 Docker Mode: Using DB path from config")
 	}
 
 	fmt.Printf("💾 Database Path: %s\n", finalDBPath)
 	fmt.Println("========================================")
 
-	// 3. Khởi tạo DB
+	// 3. Initialize DB
 	db := database.InitDB(finalDBPath)
-	// Lưu ý: Trong chế độ server chạy mãi mãi (select{}), defer này chỉ chạy khi tắt app (Ctrl+C)
+	// Note: In server's infinite loop mode (select{}), this defer only runs on app shutdown (Ctrl+C)
 	defer db.Close()
 
-	// 4. Khởi tạo Blockchain
+	// 4. Initialize Blockchain
 	chain := core.InitBlockchain(db)
 
-	// 5. Khởi tạo Smart Contract Manager
+	// 5. Initialize Smart Contract Manager
 	contractManager := contract.NewManager(chain)
 
-	fmt.Println("📦 Đang nạp Chaincode riêng cho Node này...")
+	fmt.Println("📦 Loading Chaincodes for this Node...")
 	{{range .Registrations}}	contractManager.RegisterApp({{.}})
 	{{end}}
 
 	fmt.Printf("⛓️  Blockchain Height: %d\n", chain.GetBestHeight())
 
-	// 6. Khởi tạo P2P Server
+	// 6. Initialize P2P Server
 	srv := p2p.NewServer(conf.Port, contractManager)
 	go srv.Start()
 
-	// 7. Kết nối Peers (Sau 2s)
+	// 7. Connect to Peers (After 2s)
 	go func() {
 		time.Sleep(2 * time.Second)
 		if len(conf.Peers) > 0 {
-			fmt.Println("🌐 Danh sách Peers trong config:", conf.Peers)
+			fmt.Println("🌐 Peers list in config:", conf.Peers)
 
 			for _, peerAddr := range conf.Peers {
 				targetAddr := peerAddr
 
 				if isDevMode {
 					parts := strings.Split(peerAddr, ":")
-					// Đảm bảo đúng định dạng host:port
+					// Ensure correct host:port format
 					if len(parts) == 2 {
 						port := parts[1]
 
-						// Tạo địa chỉ mới trỏ về localhost
+						// Create a new address pointing to localhost
 						targetAddr = fmt.Sprintf("localhost:%s", port)
 					}
 				}
 
-				// Kết nối tới địa chỉ (đã xử lý hoặc giữ nguyên)
+				// Connect to the address (processed or original)
 				srv.ConnectToPeer(targetAddr)
 			}
 		}
 	}()
 
-	// 8. Block main thread để server chạy mãi mãi
+	// 8. Block main thread to keep the server running forever
 	select {}
 }
 	`
@@ -324,19 +324,19 @@ func startNode(configPath string, isDevMode bool) {
 	seen := make(map[string]bool)
 
 	for _, cc := range chaincodes {
-		// Thêm import nếu chưa có
+		// Add import if not already present
 		if !seen[cc.Package] {
 			data.Imports = append(data.Imports, cc.Package)
 			seen[cc.Package] = true
 		}
-		// Thêm dòng đăng ký: bds.NewBDSContract()
-		// Giả sử package tên là phần cuối của đường dẫn (vd: bds)
+		// Add registration line: bds.NewBDSContract()
+		// Assume package name is the last part of the path (e.g., bds)
 		pkgName := filepath.Base(cc.Package)
 		regLine := fmt.Sprintf("%s.%s()", pkgName, cc.Constructor)
 		data.Registrations = append(data.Registrations, regLine)
 	}
 
-	// Ghi file
+	// Write file
 	t, err := template.New("main").Parse(mainTmpl)
 	if err != nil {
 		return err
@@ -351,34 +351,34 @@ func startNode(configPath string, isDevMode bool) {
 	return t.Execute(f, data)
 }
 
-// Nén main.go và các smart contract vào khoai_protected.zip của từng node
+// Zip main.go and smart contracts into khoai_protected.zip for each node
 func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
 
 	password, err := utils.GetEnv("KHOAI_PASS")
 	if err != nil {
-		return fmt.Errorf("❌ Lỗi: Chưa set biến môi trường KHOAI_PASS")
+		return fmt.Errorf("❌ Error: KHOAI_PASS environment variable not set")
 	}
 
 	if password == "" {
-		return fmt.Errorf("❌ Lỗi: Chưa set biến môi trường KHOAI_PASS")
+		return fmt.Errorf("❌ Error: KHOAI_PASS environment variable not set")
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("không lấy được thư mục hiện tại: %v", err)
+		return fmt.Errorf("could not get current directory: %v", err)
 	}
 
 	mainPath := filepath.Join(nodeDir, "main.go")
 	if _, err := os.Stat(mainPath); err != nil {
-		return fmt.Errorf("không tìm thấy file main.go tại %s: %v", mainPath, err)
+		return fmt.Errorf("main.go not found at %s: %v", mainPath, err)
 	}
 
 	outputPath := filepath.Join(nodeDir, "khoai_protected.zip")
-	fmt.Printf("🔒 Đang nén main + smart contracts vào '%s' với mật khẩu...\n", outputPath)
+	fmt.Printf("🔒 Zipping main + smart contracts into '%s' with password...\n", outputPath)
 
 	outFile, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("không thể tạo file zip: %v", err)
+		return fmt.Errorf("could not create zip file: %v", err)
 	}
 	defer outFile.Close()
 
@@ -387,7 +387,7 @@ func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
 
 	added := make(map[string]bool)
 
-	// 1) Nén toàn bộ source code embed (trừ main để thay thế)
+	// 1) Zip all embedded source code (except main for replacement)
 	if err := fs.WalkDir(sourceCode, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -398,7 +398,7 @@ func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
 
 		archivePath := filepath.ToSlash(strings.TrimPrefix(path, "./"))
 		if archivePath == "cmd/node/main.go" {
-			return nil // sẽ thay bằng main generate
+			return nil // will be replaced by the generated main
 		}
 		if added[archivePath] {
 			return nil
@@ -415,16 +415,16 @@ func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
 		added[archivePath] = true
 		return nil
 	}); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("lỗi trong quá trình nén nguồn embed: %v", err)
+		return fmt.Errorf("error during zipping of embedded source: %v", err)
 	}
 
-	// 2) Thay thế cmd/node/main.go bằng file main generate cho node
+	// 2) Replace cmd/node/main.go with the generated main file for the node
 	if err := addFileToZip(w, mainPath, "cmd/node/main.go", password); err != nil {
-		return fmt.Errorf("lỗi trong quá trình nén %s: %v", mainPath, err)
+		return fmt.Errorf("error zipping %s: %v", mainPath, err)
 	}
 	added["cmd/node/main.go"] = true
 
-	// 3) Nén thêm các smart contract từ config (tuỳ khách hàng bổ sung)
+	// 3) Zip additional smart contracts from config (customer-specific)
 	seenChaincode := make(map[string]bool)
 	for _, cc := range chaincodes {
 		if cc.Package == "" {
@@ -485,13 +485,13 @@ func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
 		}
 	}
 
-	fmt.Println("✅ Đã nén xong thành công!")
+	fmt.Println("✅ Zipping completed successfully!")
 	return nil
 }
 
 func resolveChaincodePath(pkgPath string, rootDir string) (string, string, error) {
 	if pkgPath == "" {
-		return "", "", fmt.Errorf("đường dẫn smart contract trống")
+		return "", "", fmt.Errorf("smart contract path is empty")
 	}
 
 	cleaned := filepath.Clean(pkgPath)
@@ -522,7 +522,7 @@ func resolveChaincodePath(pkgPath string, rootDir string) (string, string, error
 	}
 
 	if _, err := os.Stat(absPath); err != nil {
-		return "", "", fmt.Errorf("không tìm thấy smart contract tại %s", absPath)
+		return "", "", fmt.Errorf("smart contract not found at %s", absPath)
 	}
 
 	return absPath, archiveBase, nil

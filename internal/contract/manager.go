@@ -8,7 +8,7 @@ import (
 
 type ContractManager struct {
 	contracts     map[string]sdk.SmartContract
-	router        *Router // Thêm bộ định tuyến
+	router        *Router // Add router
 	Chain         *core.Blockchain
 	Mempool       *core.Mempool
 	currentSender []byte
@@ -35,32 +35,32 @@ func (cm *ContractManager) GetSender() []byte {
 	return cm.currentSender
 }
 
-// RegisterApp: Đăng ký App mới
+// RegisterApp: Register a new App
 func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	name := app.GetName()
 	cm.contracts[string(name)] = app
-	fmt.Printf("📦 Đã load Smart Contract: %s\n", name)
+	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-// Execute: Chạy logic -> Tạo Tx -> Đào Block
+// Execute: Run logic -> Create Tx -> Mine Block
 func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
-	// 1. Tìm App
+	// 1. Find App
 	cm.currentSender = sender
 	app, exists := cm.contracts[string(contractName)]
 	if !exists {
-		return nil, fmt.Errorf("contract '%s' chưa được cài đặt", contractName)
+		return nil, fmt.Errorf("contract '%s' is not installed", contractName)
 	}
 	app.SetContext(cm)
 
-	// 2. CHẠY LOGIC (Simulation)
+	// 2. RUN LOGIC (Simulation)
 	result, err := cm.router.CallMethod(app, sender, method, args)
 	if err != nil {
-		fmt.Println("❌ Lỗi Contract (Reverted):", err)
-		return nil, err // Lỗi thì trả về luôn, không lưu transaction
+		fmt.Println("Contract Error (Reverted):", err)
+		return nil, err // If there's an error, return immediately, don't save the transaction
 	}
 
-	// 3. NẾU THÀNH CÔNG -> TẠO TRANSACTION (Đóng gói)
-	// (Giả sử người gửi là AdminLocal - sau này lấy từ API Auth)
+	// 3. IF SUCCESSFUL -> CREATE TRANSACTION (Package)
+	// (Assuming sender is AdminLocal - later get from Auth API)
 	tx := core.NewTransaction(
 		sender,
 		contractName,
@@ -68,17 +68,17 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 		args,
 	)
 
-	// 4. ĐÀO BLOCK (Instant Mining)
-	fmt.Println("⛏️  Đang đóng gói giao dịch...")
+	// 4. MINE BLOCK (Instant Mining)
+	fmt.Println("Packaging transaction...")
 	txsToMine, ready := cm.Mempool.Add(tx)
 	if ready {
-		fmt.Printf("🚀 Đủ 10 giao dịch -> Kích hoạt ĐÀO BLOCK!\n")
+		fmt.Printf("10 transactions reached -> Activating BLOCK MINING!\n")
 		newBlock := cm.Chain.MineBlock(txsToMine)
 		if newBlock == nil {
-			return nil, fmt.Errorf("lỗi đào block")
+			return nil, fmt.Errorf("error mining block")
 		}
 	}
 
-	// Trả về kết quả thực thi của Smart Contract
+	// Return the execution result of the Smart Contract
 	return result, nil
 }

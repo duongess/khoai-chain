@@ -6,27 +6,27 @@ import (
 	"time"
 )
 
-// 1. Phần "Ruột" (Nội dung nghiệp vụ bạn muốn gửi)
+// 1. The "Payload" (The business content you want to send)
 type TxPayload struct {
-	Contract []byte   // Ví dụ: "khoai-token"
-	Function []byte   // Ví dụ: "transfer"
-	Args     [][]byte // Ví dụ: ["nguyen-van-b", "100"]
+	Contract []byte   // e.g., "khoai-token"
+	Function []byte   // e.g., "transfer"
+	Args     [][]byte // e.g., ["nguyen-van-b", "100"]
 }
 
-// 2. Phần "Vỏ" (Gói giao dịch hoàn chỉnh)
+// 2. The "Wrapper" (The complete transaction package)
 type Transaction struct {
-	ID        []byte // Hash của giao dịch (TxHash)
-	Timestamp int64  // Thời gian tạo
-	Sender    []byte // Public Key người gửi (Để verify chữ ký)
-	Signature []byte // Chữ ký số (Để chứng minh chính chủ)
+	ID        []byte // Hash of the transaction (TxHash)
+	Timestamp int64  // Creation time
+	Sender    []byte // Sender's Public Key (To verify the signature)
+	Signature []byte // Digital signature (To prove ownership)
 
-	Payload TxPayload // Nhét phần ruột vào đây
+	Payload TxPayload // Put the payload here
 }
 
-// 3. Hàm tạo nhanh Transaction (Helper/Constructor)
+// 3. Quick Transaction creation function (Helper/Constructor)
 func NewTransaction(sender, contract, function []byte, args [][]byte) *Transaction {
 	tx := &Transaction{
-		// ID và Signature sẽ được tính toán sau khi ký
+		// ID and Signature will be calculated after signing
 		Timestamp: time.Now().UnixNano(),
 		Sender:    sender,
 		Payload: TxPayload{
@@ -40,7 +40,7 @@ func NewTransaction(sender, contract, function []byte, args [][]byte) *Transacti
 }
 
 func (tx *Transaction) Hash() []byte {
-	// Đơn giản hóa: Băm sender + timestamp + contract
+	// Simplified: Hash sender + timestamp + contract
 	data := fmt.Sprintf("%s%d%s%s", tx.Sender, tx.Timestamp, tx.Payload.Contract, tx.Payload.Function)
 	hash := sha256.Sum256([]byte(data))
 	return hash[:]

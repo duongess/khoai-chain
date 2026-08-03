@@ -3,10 +3,10 @@ package p2p
 import "khoai-chain/internal/core"
 
 const (
-	MsgExecute   = "EXECUTE"    // Client gửi lệnh
-	MsgNewBlock  = "NEW_BLOCK"  // Case 2: Có block mới thì gửi
-	MsgGetChain  = "GET_CHAIN"  // Case 1: Peer mới xin dữ liệu
-	MsgSendChain = "SEND_CHAIN" // Case 1: Peer cũ trả dữ liệu
+	MsgExecute   = "EXECUTE"    // Client sends command
+	MsgNewBlock  = "NEW_BLOCK"  // Case 2: Send if there's a new block
+	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
+	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
 )
 
 // Request gửi qua TCP
@@ -28,7 +28,7 @@ type SendBlocksRequest struct {
 	Blocks []*core.Block `json:"blocks"`
 }
 
-// Response trả về cho Client
+// Response returned to Client
 type ResponseMessage struct {
 	Status string `json:"status"`
 	Result string `json:"result"`

@@ -36,17 +36,17 @@ Before you begin, ensure you have the following installed:
 
     **For Linux:**
     ```bash
-    GOOS=linux GOARCH=amd64 go build -o dist/khoai builder.go
+    GOOS=linux GOARCH=amd64 go build -o dist/khoai-builder-linux builder.go
     ```
 
     **For Windows:**
     ```bash
-    GOOS=windows GOARCH=amd64 go build -o dist/khoai.exe builder.go
+    GOOS=windows GOARCH=amd64 go build -o dist/khoai-builder-windows.exe builder.go
     ```
 
     **For macOS:**
     ```bash
-    GOOS=darwin GOARCH=amd64 go build -o dist/khoai builder.go
+    GOOS=darwin GOARCH=amd64 go build -o dist/khoai-builder-darwin builder.go
     ```
 
     It's recommended to add the `dist` directory to your system's `PATH` or move the `khoai` executable to a directory already in your `PATH` (e.g., `/usr/local/bin` on Linux/macOS).

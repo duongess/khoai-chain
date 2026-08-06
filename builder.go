@@ -4,7 +4,6 @@ import (
 	"embed"
 	"fmt"
 	"khoai-chain/internal/config"
-	utils "khoai-chain/internal/ulits"
 	"khoai-chain/pkg/cli"
 	"os"
 	"path/filepath"
@@ -18,20 +17,16 @@ var sourceCode embed.FS
 func main() {
 	app := cli.NewCLI()
 	config.SetSourceCode(sourceCode)
-	utils.SetSourceCode(sourceCode)
 
 	// --- COMMAND 1: GENERATE DOCKER ARTIFACTS ---
 	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
-		fmt.Println("🏭 Reading khoai-config.yaml configuration...")
+		fmt.Println("Reading khoai-config.yaml configuration...")
 
 		// 1. Read YAML file
-		filePath, err := utils.GetEnv("KHOAI_FILE_CONFIG")
-		if err != nil {
-			return fmt.Errorf("❌ Error: %v", err)
-		}
+		filePath := config.ConfigFileName
 		data, err := sourceCode.ReadFile(filePath)
 		if err != nil {
-			return fmt.Errorf("không tìm thấy .env: %v", err)
+			return fmt.Errorf("Error reading %s: %v", filePath, err)
 		}
 
 		var netConf config.NetworkConfig
@@ -56,10 +51,6 @@ func main() {
 			if err != nil {
 				return err
 			}
-			err = config.BuildExe(nodeDir)
-			if err != nil {
-				return err
-			}
 		}
 
 		// 4. Generate the main docker-compose.yaml
@@ -68,9 +59,9 @@ func main() {
 			return err
 		}
 
-		fmt.Printf("\n✅ DONE! Files created in the '%s/' directory\n", buildDir)
-		fmt.Println("👉 To build images: docker compose -f build/docker-compose.yaml build")
-		fmt.Println("👉 To run:   docker compose -f build/docker-compose.yaml up -d")
+		fmt.Printf("\nDONE! Files created in the '%s/' directory\n", buildDir)
+		fmt.Println("- To build images: docker compose -f build/docker-compose.yaml build")
+		fmt.Println("- To run:   docker compose -f build/docker-compose.yaml up -d")
 		return nil
 	})
 
@@ -83,7 +74,7 @@ func main() {
 			targetDir = args[0]
 		}
 
-		fmt.Printf("🔨 Starting build process in: %s\n", targetDir)
+		fmt.Printf("Starting build process in: %s\n", targetDir)
 
 		err := config.BuildExe(targetDir)
 		if err != nil {

@@ -2,17 +2,11 @@ package config
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"html/template"
-	"io"
-	"io/fs"
-	utils "khoai-chain/internal/ulits"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/yeka/zip"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,32 +68,30 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 		return err
 	}
 
+	// Generate the main.go file specific to this node's chaincodes
 	if err := generateMainFile(nodeDir, node.Chaincodes); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
-	if err := ZipFiles(nodeDir, node.Chaincodes); err != nil {
-		return err
-	}
-	defer os.RemoveAll(filepath.Join(nodeDir, "main.go"))
-
 	// B. Generate Dockerfile (Multi-stage build)
 	dockerfileTmpl := `
-# --- Stage 1: Builder (Go environment needed for khoai build to work) ---
+# --- Stage 1: Builder ---
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
-# 1. Install curl and bash to run the khoai installation command
-RUN apk add --no-cache curl bash
+# 1. Copy go.mod and go.sum to leverage Docker cache
+COPY go.mod go.sum ./
+RUN go mod download
 
-# 2. Install Khoai CLI
-RUN curl -fsSL https://raw.githubusercontent.com/duongess/khoaichain-sdk/main/install.sh | bash
+# 2. Copy the entire source code from the project root
+COPY . .
 
-# 3. Copy the protected zip file
-COPY ./khoai_protected.zip .
+# 3. Overwrite the generic main.go with the one generated for this specific node
+# The path is relative to the build context (project root)
+COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
 
-# 4. Run the build command (This will succeed as Go is now available)
-RUN khoai build .
+# 4. Build the application
+RUN go build -o khoai-node ./cmd/node
 
 # --- Stage 2: Runner (Run the application) ---
 FROM alpine:3.19
@@ -108,22 +100,18 @@ WORKDIR /app
 # 5. Install necessary system libraries
 RUN apk add --no-cache ca-certificates libc6-compat
 
-# 6. Copy only the 'khoai-node' binary built from Stage 1
+# 6. Copy only the 'khoai-node' binary and the config file
 COPY --from=builder /app/khoai-node .
-COPY config.yaml .
+COPY build/{{.NodeName}}/config.yaml .
 
 # 7. Setup for running
 RUN mkdir -p /app/data
-EXPOSE 9002
+EXPOSE {{.Port}}
 
 CMD ["./khoai-node", "run"]
 `
 	// Template data
-	data := map[string]interface{}{
-		"ImageBase": net.ImageBase,
-		"NodeName":  node.Name,
-		"Port":      node.Port,
-	}
+	data := map[string]interface{}{"NodeName": node.Name, "Port": node.Port}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
 	f, err := os.Create(filepath.Join(nodeDir, "Dockerfile"))
@@ -146,8 +134,8 @@ services:
 {{range .Nodes}}
   {{.Name}}:
     build:
-      context: ./{{.Name}}  # Points to the root folder containing the source code
-      dockerfile: Dockerfile
+      context: ..  # Build context is the project root, relative to this compose file
+      dockerfile: ./build/{{.Name}}/Dockerfile # Path to the Dockerfile, relative to the context
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
@@ -338,207 +326,4 @@ func startNode(configPath string, isDevMode bool) {
 	defer f.Close()
 
 	return t.Execute(f, data)
-}
-
-// Zip main.go and smart contracts into khoai_protected.zip for each node
-func ZipFiles(nodeDir string, chaincodes []ChaincodeConfig) error {
-
-	password, err := utils.GetEnv("KHOAI_PASS")
-	if err != nil {
-		return fmt.Errorf("❌ Error: KHOAI_PASS environment variable not set")
-	}
-
-	if password == "" {
-		return fmt.Errorf("❌ Error: KHOAI_PASS environment variable not set")
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("could not get current directory: %v", err)
-	}
-
-	mainPath := filepath.Join(nodeDir, "main.go")
-	if _, err := os.Stat(mainPath); err != nil {
-		return fmt.Errorf("main.go not found at %s: %v", mainPath, err)
-	}
-
-	outputPath := filepath.Join(nodeDir, "khoai_protected.zip")
-	fmt.Printf("🔒 Zipping main + smart contracts into '%s' with password...\n", outputPath)
-
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("could not create zip file: %v", err)
-	}
-	defer outFile.Close()
-
-	w := zip.NewWriter(outFile)
-	defer w.Close()
-
-	added := make(map[string]bool)
-
-	// 1) Zip all embedded source code (except main for replacement)
-	if err := fs.WalkDir(sourceCode, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || path == "." {
-			return nil
-		}
-
-		archivePath := filepath.ToSlash(strings.TrimPrefix(path, "./"))
-		if archivePath == "cmd/node/main.go" {
-			return nil // will be replaced by the generated main
-		}
-		if added[archivePath] {
-			return nil
-		}
-
-		content, err := sourceCode.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		if err := addBytesToZip(w, archivePath, content, password); err != nil {
-			return err
-		}
-		added[archivePath] = true
-		return nil
-	}); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("error during zipping of embedded source: %v", err)
-	}
-
-	// 2) Replace cmd/node/main.go with the generated main file for the node
-	if err := addFileToZip(w, mainPath, "cmd/node/main.go", password); err != nil {
-		return fmt.Errorf("error zipping %s: %v", mainPath, err)
-	}
-	added["cmd/node/main.go"] = true
-
-	// 3) Zip additional smart contracts from config (customer-specific)
-	seenChaincode := make(map[string]bool)
-	for _, cc := range chaincodes {
-		if cc.Package == "" {
-			continue
-		}
-
-		resolvedPath, archiveBase, err := resolveChaincodePath(cc.Package, cwd)
-		if err != nil {
-			return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
-		}
-
-		if seenChaincode[resolvedPath] {
-			continue
-		}
-		seenChaincode[resolvedPath] = true
-
-		info, err := os.Stat(resolvedPath)
-		if err != nil {
-			return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
-		}
-
-		if info.IsDir() {
-			err = filepath.WalkDir(resolvedPath, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-				if d.IsDir() {
-					return nil
-				}
-
-				rel, err := filepath.Rel(resolvedPath, path)
-				if err != nil {
-					return err
-				}
-
-				archivePath := filepath.ToSlash(filepath.Join(archiveBase, rel))
-				if added[archivePath] {
-					return nil
-				}
-				if err := addFileToZip(w, path, archivePath, password); err != nil {
-					return err
-				}
-				added[archivePath] = true
-				return nil
-			})
-			if err != nil {
-				return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
-			}
-		} else {
-			archivePath := filepath.ToSlash(archiveBase)
-			if added[archivePath] {
-				continue
-			}
-			if err := addFileToZip(w, resolvedPath, archivePath, password); err != nil {
-				return fmt.Errorf("chaincode '%s': %v", cc.Name, err)
-			}
-			added[archivePath] = true
-		}
-	}
-
-	fmt.Println("✅ Zipping completed successfully!")
-	return nil
-}
-
-func resolveChaincodePath(pkgPath string, rootDir string) (string, string, error) {
-	if pkgPath == "" {
-		return "", "", fmt.Errorf("smart contract path is empty")
-	}
-
-	cleaned := filepath.Clean(pkgPath)
-	modulePrefix := "khoai-chain/"
-	archiveBase := filepath.ToSlash(cleaned)
-	pathForAbs := cleaned
-
-	if strings.HasPrefix(cleaned, modulePrefix) {
-		trimmed := strings.TrimPrefix(cleaned, modulePrefix)
-		archiveBase = filepath.ToSlash(trimmed)
-		pathForAbs = trimmed
-	}
-
-	if filepath.IsAbs(cleaned) {
-		pathForAbs = cleaned
-		archiveBase = filepath.ToSlash(filepath.Base(cleaned))
-	} else if rootDir != "" {
-		pathForAbs = filepath.Join(rootDir, pathForAbs)
-	}
-
-	absPath, err := filepath.Abs(pathForAbs)
-	if err != nil {
-		return "", "", err
-	}
-
-	if archiveBase == "" {
-		archiveBase = filepath.ToSlash(filepath.Base(absPath))
-	}
-
-	if _, err := os.Stat(absPath); err != nil {
-		return "", "", fmt.Errorf("smart contract not found at %s", absPath)
-	}
-
-	return absPath, archiveBase, nil
-}
-
-func addFileToZip(w *zip.Writer, filePath, archivePath, password string) error {
-	reader, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	writer, err := w.Encrypt(archivePath, password, zip.AES256Encryption)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(writer, reader)
-	return err
-}
-
-func addBytesToZip(w *zip.Writer, archivePath string, data []byte, password string) error {
-	writer, err := w.Encrypt(archivePath, password, zip.AES256Encryption)
-	if err != nil {
-		return err
-	}
-
-	_, err = writer.Write(data)
-	return err
 }

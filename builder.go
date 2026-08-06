@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//go:embed cmd internal pkg examples go.mod go.sum .env
+//go:embed cmd internal pkg examples go.mod go.sum
 var sourceCode embed.FS
 
 func main() {

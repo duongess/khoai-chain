@@ -76,32 +76,34 @@ func GenerateNodeArtifacts(nodeDir string, node NodeConfig, net NetworkConfig) e
 	// B. Generate Dockerfile (Multi-stage build)
 	dockerfileTmpl := `
 # --- Stage 1: Builder ---
-FROM golang:1.22-alpine AS builder
+FROM {{.ImageBase}} AS builder
 WORKDIR /app
 
-# 1. Copy go.mod and go.sum to leverage Docker cache
+# 1. Copy generated main.go first. A change here MUST trigger a rebuild.
+COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
+
+# 2. Copy go.mod and go.sum to leverage Docker cache for dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 2. Copy the entire source code from the project root
-COPY . .
+# 3. Copy the rest of the source code
+COPY cmd ./cmd
+COPY internal ./internal
+COPY pkg ./pkg
+COPY examples ./examples
 
-# 3. Overwrite the generic main.go with the one generated for this specific node
-# The path is relative to the build context (project root)
-COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
-
-# 4. Build the application
-RUN go build -o khoai-node ./cmd/node
+# 4. Build the application binary
+RUN go build -o /khoai-node ./cmd/node
 
 # --- Stage 2: Runner (Run the application) ---
 FROM alpine:3.19
 WORKDIR /app
 
-# 5. Install necessary system libraries
+# 5. Install necessary system libraries (if any)
 RUN apk add --no-cache ca-certificates libc6-compat
 
-# 6. Copy only the 'khoai-node' binary and the config file
-COPY --from=builder /app/khoai-node .
+# 6. Copy the final binary from the builder stage and the config file
+COPY --from=builder /khoai-node .
 COPY build/{{.NodeName}}/config.yaml .
 
 # 7. Setup for running
@@ -111,7 +113,11 @@ EXPOSE {{.Port}}
 CMD ["./khoai-node", "run"]
 `
 	// Template data
-	data := map[string]interface{}{"NodeName": node.Name, "Port": node.Port}
+	data := map[string]interface{}{
+		"NodeName":  node.Name,
+		"Port":      node.Port,
+		"ImageBase": net.ImageBase,
+	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
 	f, err := os.Create(filepath.Join(nodeDir, "Dockerfile"))
@@ -164,25 +170,25 @@ func generateMainFile(outputDir string, chaincodes []ChaincodeConfig) error {
 import (
 	"flag"
 	"fmt"
-	"time"
 	"os"
 	"path/filepath"
-	"strings"
-	
+	"time"
+
 	// Import core
-	"khoai-chain/pkg/cli"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/p2p"
+	"khoai-chain/pkg/cli"
+	"khoai-chain/examples"
 
 	{{range .Imports}}	"{{.}}"
 	{{end}}
 )
 
 var (
-	BuiltInNodeName   string = "Unknown Node"
+	BuiltInNodeName string = "Unknown Node"
 )
 
 func main() {
@@ -201,99 +207,62 @@ func main() {
 	// 2. Initialize CLI
 	nodeCLI := cli.NewCLI()
 
-	// --- COMMAND: RUN (For Docker/Production) ---
-	// This mode strictly respects the path in the config file (e.g., /app/data)
-	nodeCLI.AddCommand("run", "Run node in Production (Docker) mode", func(args []string) error {
-		fmt.Println("Mode: DOCKER / PRODUCTION")
-		startNode(*configPathFlag, false)
-		return nil
-	})
+	// --- COMMAND: RUN (The only command for the node) ---
+	nodeCLI.AddCommand("run", "Run the blockchain node", func(args []string) error {
+		// 1. Load Config
+		conf, err := config.LoadConfig(*configPathFlag)
+		if err != nil {
+			fmt.Printf("Could not read config file at: %s\n", *configPathFlag)
+			absPath, _ := filepath.Abs(*configPathFlag)
+			fmt.Printf("   (Absolute path: %s)\n", absPath)
+			os.Exit(1)
+		}
 
-	// --- COMMAND: DEV (For quick developer testing) ---
-	// This mode forces the DB to be next to the exe, regardless of the config
-	nodeCLI.AddCommand("dev", "Run node in Dev mode (DB saved next to the exe)", func(args []string) error {
-		fmt.Println("Mode: DEVELOPMENT")
-		startNode(*configPathFlag, true)
-		return nil
+		fmt.Println("========================================")
+		fmt.Printf("KHOAI CHAIN NODE: %s\n", conf.NodeName)
+		fmt.Printf("Config File: %s\n", *configPathFlag)
+		fmt.Printf("Database Path: %s\n", conf.DBPath)
+		fmt.Println("========================================")
+
+		// 2. Initialize DB
+		db := database.InitDB(conf.DBPath)
+		defer db.Close()
+
+		// 3. Initialize Blockchain
+		chain := core.InitBlockchain(db)
+
+		// 4. Initialize Smart Contract Manager
+		contractManager := contract.NewManager(chain)
+
+		// Register contracts
+		contractManager.RegisterApp(examples.NewUsageExamples())
+		{{range .Registrations}}
+		contractManager.RegisterApp({{.}})
+		{{end}}
+
+		fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
+
+		// 5. Initialize P2P Server
+		srv := p2p.NewServer(conf.Port, contractManager)
+		go srv.Start()
+
+		// 6. Connect to Peers (After a short delay)
+		go func() {
+			time.Sleep(2 * time.Second)
+			if len(conf.Peers) > 0 {
+				fmt.Println("Peers list in config:", conf.Peers)
+				for _, peerAddr := range conf.Peers {
+					fmt.Printf("- Connecting to peer: %s\n", peerAddr)
+					srv.ConnectToPeer(peerAddr)
+				}
+			}
+		}()
+
+		// 7. Block main thread to keep the server running forever
+		select {}
 	})
 
 	nodeCLI.Run()
-}
-
-func startNode(configPath string, isDevMode bool) {
-	// 1. Load Config
-	conf, err := config.LoadConfig(configPath)
-	if err != nil {
-		fmt.Printf("Could not read config file at: %s\n", configPath)
-		// Suggest absolute path for easier debugging
-		absPath, _ := filepath.Abs(configPath)
-		fmt.Printf("   (Absolute path: %s)\n", absPath)
-		os.Exit(1)
-	}
-
-	fmt.Println("========================================")
-	fmt.Printf("KHOAI CHAIN NODE: %s\n", BuiltInNodeName)
-	fmt.Printf("Config File: %s\n", configPath)
-
-	// 2. HANDLE DATABASE PATH (Most important logic here)
-	finalDBPath := conf.DBPath
-
-	if isDevMode {
-		// LOGIC FOR DEV:
-		dbName := filepath.Base(conf.DBPath)
-
-		// And force it to be next to the exe file
-		exePath, _ := os.Executable()
-		exeDir := filepath.Dir(exePath)
-		finalDBPath = filepath.Join(exeDir, dbName)
-
-		fmt.Println("Dev Override: Forcing DB to local directory")
-	} else {
-		// LOGIC FOR DOCKER / RUN:
-		// Keep the config. If config is "/app/data", use it as is.
-		fmt.Println("Docker Mode: Using DB path from config")
-	}
-
-	fmt.Printf("Database Path: %s\n", finalDBPath)
-	fmt.Println("========================================")
-
-	// 3. Initialize DB
-	db := database.InitDB(finalDBPath)
-	// Note: In server's infinite loop mode (select{}), this defer only runs on app shutdown (Ctrl+C)
-	defer db.Close()
-
-	// 4. Initialize Blockchain
-	chain := core.InitBlockchain(db)
-
-	// 5. Initialize Smart Contract Manager
-	contractManager := contract.NewManager(chain)
-
-	// Register example contracts (if needed)
-	// contractManager.RegisterApp(examples.NewUsageExamples())
-	// (Or use .Imports .Registrations from your template)
-	contractManager.RegisterApp(examples.NewUsageExamples())
-
-	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
-
-	// 6. Initialize P2P Server
-	srv := p2p.NewServer(conf.Port, contractManager)
-	go srv.Start()
-
-	// 7. Connect to Peers (After 2s)
-	go func() {
-		time.Sleep(2 * time.Second)
-		if len(conf.Peers) > 0 {
-			fmt.Println("Peers list in config:", conf.Peers)
-
-			for _, peerAddr := range conf.Peers {
-				fmt.Printf("- Connecting to peer: %s\n", peerAddr)
-				srv.ConnectToPeer(peerAddr)
-			}
-		}
-	}()
-
-	// 8. Block main thread to keep the server running forever
-	select {}
 }
 	`
 

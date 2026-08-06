@@ -36,28 +36,30 @@ func LoadConfig(filePath string) (*ConfigContent, error) {
 
 // BuildExe builds the executable from the source code in a given directory.
 // This simplified version no longer deals with encrypted zips.
-func BuildExe(buildDir string) error {
+func BuildExe(outputDir string) error {
 	fmt.Println("Starting build process...")
 
+	// Ensure the output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("could not create output directory %s: %w", outputDir, err)
+	}
+
 	// 1. Define output path for the executable
-	absBuildDir, err := filepath.Abs(buildDir)
+	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
 		return fmt.Errorf("Error getting absolute path: %v", err)
 	}
 
-	outputName := "khoai-node.exe"
-	if runtime.GOOS != "windows" {
-		outputName = "khoai-node"
+	outputName := "khoai-node"
+	if runtime.GOOS == "windows" {
+		outputName += ".exe"
 	}
-	outputExe := filepath.Join(absBuildDir, outputName)
+	outputExe := filepath.Join(absOutputDir, outputName)
 
 	fmt.Printf("Creating executable at: %s\n", outputExe)
 
 	// 2. Build the Go program
 	cmd := exec.Command("go", "build", "-o", outputExe, "./cmd/node")
-	// The build command should run in the context of the source code directory.
-	// This assumes `buildDir` contains the project root structure.
-	cmd.Dir = buildDir
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

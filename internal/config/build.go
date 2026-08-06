@@ -42,7 +42,7 @@ func BuildExe(buildDir string) error {
 	// 1. Define output path for the executable
 	absBuildDir, err := filepath.Abs(buildDir)
 	if err != nil {
-		return fmt.Errorf("lỗi lấy đường dẫn tuyệt đối: %v", err)
+		return fmt.Errorf("Error getting absolute path: %v", err)
 	}
 
 	outputName := "khoai-node.exe"

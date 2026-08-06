@@ -17,16 +17,22 @@ var sourceCode embed.FS
 func main() {
 	app := cli.NewCLI()
 	config.SetSourceCode(sourceCode)
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	// Ghep thu muc hien tai voi ten file cau hinh
+	configPath := filepath.Join(cwd, config.ConfigFileName)
 
 	// --- COMMAND 1: GENERATE DOCKER ARTIFACTS ---
 	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
 		fmt.Println("Reading khoai-config.yaml configuration...")
 
 		// 1. Read YAML file
-		filePath := config.ConfigFileName
-		data, err := sourceCode.ReadFile(filePath)
+		data, err := sourceCode.ReadFile(configPath)
 		if err != nil {
-			return fmt.Errorf("Error reading %s: %v", filePath, err)
+			return fmt.Errorf("%s", err)
 		}
 
 		var netConf config.NetworkConfig

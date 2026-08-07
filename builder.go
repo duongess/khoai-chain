@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -154,8 +155,8 @@ func generateArtifacts(configPath string) error {
 		return fmt.Errorf("could not read file %s: %w", config.ConfigFileName, err)
 	}
 
-	var netConf config.NetworkConfig
-	if err := yaml.Unmarshal(data, &netConf); err != nil {
+	var builderConf config.BuilderConfig
+	if err := yaml.Unmarshal(data, &builderConf); err != nil {
 		return fmt.Errorf("error parsing YAML file: %w", err)
 	}
 
@@ -165,19 +166,22 @@ func generateArtifacts(configPath string) error {
 		return err
 	}
 
-	// 3. Generate Dockerfile & Config for each Node
-	for _, node := range netConf.Nodes {
-		nodeDir := filepath.Join(buildDir, node.Name)
-		if err := os.MkdirAll(nodeDir, 0755); err != nil {
-			return err
-		}
-		if err := config.GenerateNodeArtifacts(nodeDir, node, netConf); err != nil {
-			return fmt.Errorf("error creating files for node %s: %w", node.Name, err)
+	// 3. Generate Dockerfile & Config for each Node by iterating through organizations
+	for _, org := range builderConf.Organizations {
+		for _, node := range org.Nodes {
+			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
+			nodeDir := filepath.Join(buildDir, uniqueNodeName)
+			if err := os.MkdirAll(nodeDir, 0755); err != nil {
+				return err
+			}
+			if err := config.GenerateNodeArtifacts(nodeDir, node, org, builderConf); err != nil {
+				return fmt.Errorf("error creating files for node %s: %w", uniqueNodeName, err)
+			}
 		}
 	}
 
 	// 4. Generate the main docker-compose.yaml
-	if err := config.GenerateDockerCompose(buildDir, netConf); err != nil {
+	if err := config.GenerateDockerCompose(buildDir, builderConf); err != nil {
 		return fmt.Errorf("error creating docker-compose.yaml file: %w", err)
 	}
 
@@ -199,14 +203,23 @@ func validateNodeName(configPath, nodeName string) error {
 	if err != nil {
 		return fmt.Errorf("could not read config file to validate node name: %w", err)
 	}
-	var netConf config.NetworkConfig
-	if err := yaml.Unmarshal(data, &netConf); err != nil {
+	var builderConf config.BuilderConfig
+	if err := yaml.Unmarshal(data, &builderConf); err != nil {
 		return err
 	}
-	for _, node := range netConf.Nodes {
-		if node.Name == nodeName {
-			return nil // Found
+
+	for _, org := range builderConf.Organizations {
+		for _, node := range org.Nodes {
+			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
+			if uniqueNodeName == nodeName {
+				return nil // Found
+			}
 		}
 	}
+
 	return fmt.Errorf("node '%s' is not defined in file %s", nodeName, config.ConfigFileName)
+}
+
+func sanitize(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 }

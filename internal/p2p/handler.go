@@ -9,7 +9,7 @@ import (
 
 // This function returns ([]byte, error).
 // []byte is the JSON data ALREADY PACKAGED to send back to the other party.
-func HandleMessage(payload []byte, manager *contract.ContractManager) ([]byte, error) {
+func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager) ([]byte, error) {
 	fmt.Printf("Processing data: %s\n", string(payload))
 
 	var msg CommandMessage
@@ -88,6 +88,35 @@ func HandleMessage(payload []byte, manager *contract.ContractManager) ([]byte, e
 			Blocks: blocksToSend,
 		}
 		return json.Marshal(resp)
+
+	case MsgConnectPeer:
+		var req ConnectPeerRequest
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		s.ConnectToPeer(req.Address)
+
+	case MsgDisconnectPeer:
+		var req DisconnectPeerRequest
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		s.DisconnectToPeer(req.Address)
+
+	case MsgJoinNetwork:
+		var req JoinNetworkRequest
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		s.JoinNetwork(req.Address)
+
+	case MsgListPeers:
+		var req ListPeersRequest
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		s.ListPeers()
+
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

@@ -24,7 +24,7 @@ func (p *Peer) Send(data []byte) error {
 	return err
 }
 
-func (p *Peer) ReadLoop() {
+func (p *Peer) ReadLoop(s *Server) {
 	defer p.Conn.Close()
 	reader := bufio.NewReader(p.Conn)
 
@@ -36,7 +36,7 @@ func (p *Peer) ReadLoop() {
 		}
 
 		// 2. Call Handler
-		responseBytes, err := HandleMessage(msg, p.Contracts)
+		responseBytes, err := HandleMessage(msg, s, p.Contracts)
 
 		if err != nil {
 			fmt.Println("Error handling message:", err)

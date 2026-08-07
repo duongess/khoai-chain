@@ -9,28 +9,28 @@ import (
 )
 
 type Server struct {
-	Port  string
-	Peers []*Peer
-	lock  sync.Mutex
-
+	Endpoint  string
+	Peers     map[string]*Peer
+	lock      sync.Mutex
 	Contracts *contract.ContractManager
 }
 
-func NewServer(port string, contracts *contract.ContractManager) *Server {
+func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 	return &Server{
-		Port:      port,
-		Peers:     []*Peer{},
+		Endpoint:  endpoint,
+		Peers:     make(map[string]*Peer),
+		lock:      sync.Mutex{},
 		Contracts: contracts,
 	}
 }
 
 func (s *Server) Start() {
-	listener, err := net.Listen("tcp", ":"+s.Port)
+	listener, err := net.Listen("tcp", s.Endpoint)
 	if err != nil {
-		panic(fmt.Sprintf("Could not open port %s: %v", s.Port, err))
+		panic(fmt.Sprintf("Could not open port %s: %v", s.Endpoint, err))
 	}
 
-	fmt.Printf("Server running on port %s. Waiting for connections...\n", s.Port)
+	fmt.Printf("Server running on port %s. Waiting for connections...\n", s.Endpoint)
 
 	for {
 		conn, err := listener.Accept()
@@ -40,6 +40,17 @@ func (s *Server) Start() {
 		}
 		s.AddPeer(conn)
 	}
+}
+
+func (s *Server) Stop() {
+	fmt.Println("Stopping server and disconnecting all peers...")
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	for _, peer := range s.Peers {
+		peer.Conn.Close()
+	}
+	s.Peers = make(map[string]*Peer)
 }
 
 func (s *Server) ConnectToPeer(address string) {
@@ -67,11 +78,36 @@ func (s *Server) AddPeer(conn net.Conn) {
 	defer s.lock.Unlock()
 
 	peer := NewPeer(conn, s.Contracts)
-	s.Peers = append(s.Peers, peer)
+	s.Peers[conn.RemoteAddr().String()] = peer
 
 	fmt.Printf("Connection successful: %s. Total Peers: %d\n", conn.RemoteAddr(), len(s.Peers))
 
-	go peer.ReadLoop()
+	go peer.ReadLoop(s)
+}
+
+func (s *Server) DisconnectToPeer(address string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	delete(s.Peers, address)
+	fmt.Printf("Peer %s disconnected. Total Peers: %d\n", address, len(s.Peers))
+}
+
+func (s *Server) JoinNetwork(address string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	fmt.Println("Joining network via", address)
+}
+
+func (s *Server) ListPeers() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	fmt.Println("Current Peers:")
+	for addr := range s.Peers {
+		fmt.Printf("- %s\n", addr)
+	}
 }
 
 func (s *Server) Broadcast(msg string) {

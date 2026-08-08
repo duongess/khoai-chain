@@ -1,5 +1,7 @@
 package config
 
 const (
-	ConfigFileName = "khoai-config.yaml"
+	ConfigFileName = "khoai.yaml"
+	BuildDir       = "build"
+	NodesBaseDir   = BuildDir + "/nodes"
 )

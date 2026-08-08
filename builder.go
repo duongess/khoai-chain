@@ -182,15 +182,7 @@ func main() {
 
 // generateArtifacts extracts the logic from the original "generate" command.
 func generateArtifacts(configPath string, version string) error {
-	buildDir := "build"
-
-	// If a version is provided (from `gen` command), write the .version file.
-	// This is skipped when called from `start`.
-	if version != "" {
-		if err := os.WriteFile(filepath.Join(buildDir, ".version"), []byte(version), 0644); err != nil {
-			return fmt.Errorf("failed to write .version file: %w", err)
-		}
-	}
+	// The .version file is now created by the install.sh script during `khoai gen`.
 
 	// 1. Load or create default config
 	builderConf, err := config.LoadBuilderConfig(configPath)
@@ -199,8 +191,7 @@ func generateArtifacts(configPath string, version string) error {
 	}
 
 	// 2. Create build artifacts directory
-	nodesBaseDir := filepath.Join(buildDir, "nodes")
-	if err := os.MkdirAll(nodesBaseDir, 0755); err != nil {
+	if err := os.MkdirAll(config.NodesBaseDir, 0755); err != nil {
 		return err
 	}
 
@@ -208,7 +199,7 @@ func generateArtifacts(configPath string, version string) error {
 	for _, org := range builderConf.Organizations {
 		for _, node := range org.Nodes {
 			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
-			nodeDir := filepath.Join(nodesBaseDir, uniqueNodeName)
+			nodeDir := filepath.Join(config.NodesBaseDir, uniqueNodeName)
 			if err := os.MkdirAll(nodeDir, 0755); err != nil {
 				return err
 			}
@@ -219,7 +210,7 @@ func generateArtifacts(configPath string, version string) error {
 	}
 
 	// 4. Generate the main docker-compose.yaml
-	if err := config.GenerateDockerCompose(buildDir, builderConf); err != nil {
+	if err := config.GenerateDockerCompose(config.BuildDir, builderConf); err != nil {
 		return fmt.Errorf("error creating docker-compose.yaml file: %w", err)
 	}
 
@@ -230,32 +221,27 @@ func generateArtifacts(configPath string, version string) error {
 func downloadViaScript(version string) (string, error) {
 	fmt.Printf("Starting process to download source code version: %s\n", version)
 
-	// Duong dan toi file kich ban bash (thay bang link raw GitHub cua ban)
+	// Setup command to run the install.sh script with the specified version.
 	scriptURL := "https://raw.githubusercontent.com/duongess/khoai-chain/main/install.sh"
-
-	// Tao cau lenh shell hoan chinh
 	shellCmd := fmt.Sprintf("curl -fsSL %s | bash -s -- %s", scriptURL, version)
-
-	// Thuc thi bang Bash tren he dieu hanh
 	cmd := exec.Command("bash", "-c", shellCmd)
 
-	// Bat dau ra stdout va stderr de hien thi cho nguoi dung
+	// Capture stdout to get the version string returned by the script.
 	var out bytes.Buffer
-	var stderr bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = &stderr
+	// Pipe the script's stderr to our stderr to show real-time progress.
+	cmd.Stderr = os.Stderr
 
-	// Chay lenh va doi ket qua
 	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("error executing shell script:\n%s\nError details: %w", stderr.String(), err)
+		return "", fmt.Errorf("error executing install.sh script: %w", err)
 	}
-
-	fmt.Println("Result from script:")
-	fmt.Println(out.String())
 
 	// The script is expected to print the downloaded version tag to stdout.
 	downloadedVersion := strings.TrimSpace(out.String())
+	if downloadedVersion == "" {
+		return "", fmt.Errorf("install.sh script did not output a version string")
+	}
 	return downloadedVersion, nil
 }
 

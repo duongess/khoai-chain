@@ -454,7 +454,21 @@ func main() {
 		// Add registration line: bds.NewBDSContract()
 		// Assume package name is the last part of the path (e.g., bds)
 		pkgName := filepath.Base(cc.Package)
-		regLine := fmt.Sprintf("%s.%s()", pkgName)
+
+		// Convert a name like "sample-contract" to a Go constructor function name like "NewSampleContract"
+		// 1. Split by "-": ["sample", "contract"]
+		// 2. Capitalize each part: ["Sample", "Contract"]
+		// 3. Join and prepend "New": "NewSampleContract"
+		var parts = strings.Split(cc.Name, "-")
+		var goNameParts []string
+		for _, part := range parts {
+			if len(part) > 0 {
+				goNameParts = append(goNameParts, strings.ToUpper(string(part[0]))+part[1:])
+			}
+		}
+		funcName := "New" + strings.Join(goNameParts, "")
+
+		regLine := fmt.Sprintf("%s.%s()", pkgName, funcName)
 		data.Registrations = append(data.Registrations, regLine)
 	}
 

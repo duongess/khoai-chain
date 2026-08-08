@@ -11,8 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed cmd internal pkg examples go.mod go.sum
@@ -161,15 +159,10 @@ func main() {
 
 // generateArtifacts extracts the logic from the original "generate" command.
 func generateArtifacts(configPath string) error {
-	// 1. Read YAML file
-	data, err := os.ReadFile(configPath)
+	// 1. Load or create default config
+	builderConf, err := config.LoadBuilderConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("could not read file %s: %w", config.ConfigFileName, err)
-	}
-
-	var builderConf config.BuilderConfig
-	if err := yaml.Unmarshal(data, &builderConf); err != nil {
-		return fmt.Errorf("error parsing YAML file: %w", err)
+		return err
 	}
 
 	// 2. Create build artifacts directory
@@ -211,13 +204,10 @@ func runCommand(name string, args ...string) error {
 
 // validateNodeName checks if a given node name exists in the config file.
 func validateNodeName(configPath, nodeName string) error {
-	data, err := os.ReadFile(configPath)
+	builderConf, err := config.LoadBuilderConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("could not read config file to validate node name: %w", err)
-	}
-	var builderConf config.BuilderConfig
-	if err := yaml.Unmarshal(data, &builderConf); err != nil {
-		return err
+		// If config loading fails, we can't validate.
+		return fmt.Errorf("could not load configuration to validate node name: %w", err)
 	}
 
 	for _, org := range builderConf.Organizations {

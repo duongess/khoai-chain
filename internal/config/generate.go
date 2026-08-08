@@ -18,54 +18,84 @@ func SetSourceCode(source embed.FS) {
 	sourceCode = source
 }
 
+// LoadBuilderConfig loads the configuration from khoai.yaml.
+// If the file does not exist, it returns a default configuration.
+// It also applies defaults for any missing optional sections.
+func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
+	var cfg BuilderConfig
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("khoai.yaml not found, using default configuration.")
+			cfg = *GetDefaultBuilderConfig()
+		} else {
+			return nil, fmt.Errorf("could not read config file %s: %w", configPath, err)
+		}
+	} else {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("error parsing YAML file %s: %w", configPath, err)
+		}
+	}
+
+	// Apply defaults for missing sections
+	ApplyDefaults(&cfg)
+
+	// Validate the final configuration
+	if err := ValidateBuilderConfig(&cfg); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	return &cfg, nil
+}
+
 // --- New Configuration Models ---
 
-// BuilderConfig is the root configuration structure from khoai-config.yaml
+// BuilderConfig is the root configuration structure from khoai.yaml
 type BuilderConfig struct {
-	Network       NetworkConfig        `yaml:"network"`
-	Docker        DockerConfig         `yaml:"docker"`
+	Network       *NetworkConfig       `yaml:"network,omitempty"`
+	Docker        *DockerConfig        `yaml:"docker,omitempty"`
 	Organizations []OrganizationConfig `yaml:"organizations"`
 }
 
 // NetworkConfig defines the overall network properties.
 type NetworkConfig struct {
-	Name   string `yaml:"name"`
-	Domain string `yaml:"domain"`
+	Name   string `yaml:"name,omitempty"`
+	Domain string `yaml:"domain,omitempty"`
 }
 
 // DockerConfig holds all settings for building Docker images.
 type DockerConfig struct {
-	ImageBase string `yaml:"image_base"`
-	ImageTag  string `yaml:"image_tag"`
-	Registry  string `yaml:"registry"`
+	ImageBase string `yaml:"image_base,omitempty"`
+	ImageTag  string `yaml:"image_tag,omitempty"`
+	Registry  string `yaml:"registry,omitempty"`
 }
 
 // OrganizationConfig represents a single organization in the network.
 type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
-	Metadata    MetadataConfig      `yaml:"metadata"`
+	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
 	Chaincodes  []ChaincodeConfig   `yaml:"chaincodes"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
 }
 
 // MetadataConfig contains descriptive information about an organization.
 type MetadataConfig struct {
-	Description string `yaml:"description"`
-	Website     string `yaml:"website"`
+	Description string `yaml:"description,omitempty"`
+	Website     string `yaml:"website,omitempty"`
 }
 
 // RuntimeNodeConfig defines a single blockchain node server.
 type RuntimeNodeConfig struct {
-	ID          string   `yaml:"id"`
-	DisplayName string   `yaml:"display_name"`
-	Endpoint    string   `yaml:"endpoint"`
-	Peers       []string `yaml:"peers"`
+	ID          string `yaml:"id"`
+	DisplayName string `yaml:"display_name"`
+	Endpoint    string `yaml:"endpoint"`
 }
 
 // ChaincodeConfig defines a smart contract.
 type ChaincodeConfig struct {
-	Name    string `yaml:"name"`
-	Package string `yaml:"package"`
+	Name    string `yaml:"name,omitempty"`
+	Package string `yaml:"package,omitempty"`
 }
 
 // MainTemplateData is used for generating main.go.
@@ -74,10 +104,83 @@ type MainTemplateData struct {
 	Registrations []string
 }
 
+// GetDefaultBuilderConfig returns a default configuration for the network.
+func GetDefaultBuilderConfig() *BuilderConfig {
+	return &BuilderConfig{
+		Network: &NetworkConfig{
+			Name:   "Khoai_Network",
+			Domain: "khoai.local",
+		},
+		Docker: &DockerConfig{
+			ImageBase: "golang:1.22-alpine",
+			ImageTag:  "latest",
+			Registry:  "registry.duongess.com/khoai-chain",
+		},
+		Organizations: []OrganizationConfig{
+			{
+				DisplayName: "DefaultOrg",
+				Nodes: []RuntimeNodeConfig{
+					{
+						ID:          "node1",
+						DisplayName: "Default Node 1",
+						Endpoint:    "0.0.0.0:9000",
+					},
+				},
+			},
+		},
+	}
+}
+
+// ApplyDefaults fills in missing configuration sections with default values.
+func ApplyDefaults(cfg *BuilderConfig) {
+	defaultCfg := GetDefaultBuilderConfig()
+	if cfg.Network == nil {
+		cfg.Network = defaultCfg.Network
+	}
+	if cfg.Docker == nil {
+		cfg.Docker = defaultCfg.Docker
+	}
+	if len(cfg.Organizations) == 0 {
+		cfg.Organizations = defaultCfg.Organizations
+	}
+}
+
+// ValidateBuilderConfig checks the builder configuration for correctness.
+func ValidateBuilderConfig(cfg *BuilderConfig) error {
+	orgNames := make(map[string]bool)
+	for _, org := range cfg.Organizations {
+		if org.DisplayName == "" {
+			return fmt.Errorf("organization display_name cannot be empty")
+		}
+		if orgNames[org.DisplayName] {
+			return fmt.Errorf("duplicate organization display_name: %s", org.DisplayName)
+		}
+		orgNames[org.DisplayName] = true
+
+		nodeIDs := make(map[string]bool)
+		for _, node := range org.Nodes {
+			if node.ID == "" {
+				return fmt.Errorf("node id cannot be empty in organization %s", org.DisplayName)
+			}
+			if node.Endpoint == "" {
+				return fmt.Errorf("node endpoint cannot be empty for node %s in organization %s", node.ID, org.DisplayName)
+			}
+			if _, _, err := net.SplitHostPort(node.Endpoint); err != nil {
+				return fmt.Errorf("invalid endpoint format for node %s in organization %s: %s", node.ID, org.DisplayName, node.Endpoint)
+			}
+			if nodeIDs[node.ID] {
+				return fmt.Errorf("duplicate node id '%s' in organization %s", node.ID, org.DisplayName)
+			}
+			nodeIDs[node.ID] = true
+		}
+	}
+	return nil
+}
+
 // --- LOGIC TO GENERATE CONFIG FILE FOR EACH NODE ---
 
 // GenerateNodeArtifacts creates the config.yaml, Dockerfile, and main.go for a single node.
-func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg BuilderConfig) error {
+func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig) error {
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
@@ -85,6 +188,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
+	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
 
 	uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
 
@@ -109,7 +213,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
-	finalConfig.Endpoint = node.Endpoint
+	finalConfig.Endpoint = listenEndpoint
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -184,7 +288,7 @@ CMD ["./khoai-node", "run"]
 // --- LOGIC TO GENERATE DOCKER-COMPOSE ---
 
 // GenerateDockerCompose creates the docker-compose.yaml file for the entire network.
-func GenerateDockerCompose(baseDir string, cfg BuilderConfig) error {
+func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	// We need to create a flat list of nodes for the template.
 	type ComposeNodeInfo struct {
 		Name string // unique name: vingroup-hn

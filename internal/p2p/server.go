@@ -85,12 +85,31 @@ func (s *Server) AddPeer(conn net.Conn) {
 	go peer.ReadLoop(s)
 }
 
+func (s *Server) RemovePeer(p *Peer) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	addr := p.Conn.RemoteAddr().String()
+	if _, ok := s.Peers[addr]; ok {
+		delete(s.Peers, addr)
+		fmt.Printf("Peer %s removed from list. Total Peers: %d\n", addr, len(s.Peers))
+	}
+}
+
 func (s *Server) DisconnectToPeer(address string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	delete(s.Peers, address)
-	fmt.Printf("Peer %s disconnected. Total Peers: %d\n", address, len(s.Peers))
+	// Find the peer and close its connection. This will trigger its ReadLoop to exit
+	// and call RemovePeer via its defer statement.
+	if peer, ok := s.Peers[address]; ok {
+		fmt.Printf("Closing connection to peer %s...\n", address)
+		// Closing the connection will cause the peer's ReadLoop to error out,
+		// which in turn triggers the deferred RemovePeer call.
+		peer.Conn.Close()
+	} else {
+		fmt.Printf("Peer %s not found for disconnection.\n", address)
+	}
 }
 
 func (s *Server) JoinNetwork(address string) {
@@ -108,6 +127,18 @@ func (s *Server) ListPeers() {
 	for addr := range s.Peers {
 		fmt.Printf("- %s\n", addr)
 	}
+}
+
+func (s *Server) GetPeerList() []string {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	peers := make([]string, 0, len(s.Peers))
+	for addr := range s.Peers {
+		peers = append(peers, addr)
+	}
+
+	return peers
 }
 
 func (s *Server) Broadcast(msg string) {

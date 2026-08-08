@@ -92,30 +92,44 @@ func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager)
 	case MsgConnectPeer:
 		var req ConnectPeerRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for CONNECT_PEER"}
+			return json.Marshal(resp)
 		}
-		s.ConnectToPeer(req.Address)
+		// Run in a goroutine to avoid blocking the handler from sending a response
+		go s.ConnectToPeer(req.Address)
+		resp := ResponseMessage{Status: "Success", Result: fmt.Sprintf("Connection to %s initiated.", req.Address)}
+		return json.Marshal(resp)
 
 	case MsgDisconnectPeer:
 		var req DisconnectPeerRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for DISCONNECT_PEER"}
+			return json.Marshal(resp)
 		}
 		s.DisconnectToPeer(req.Address)
+		resp := ResponseMessage{Status: "Success", Result: fmt.Sprintf("Disconnection from %s initiated.", req.Address)}
+		return json.Marshal(resp)
 
 	case MsgJoinNetwork:
 		var req JoinNetworkRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for JOIN_NETWORK"}
+			return json.Marshal(resp)
 		}
 		s.JoinNetwork(req.Address)
+		resp := ResponseMessage{Status: "Success", Result: fmt.Sprintf("Join network via %s initiated.", req.Address)}
+		return json.Marshal(resp)
 
 	case MsgListPeers:
-		var req ListPeersRequest
-		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
+		// s.ListPeers() prints to server stdout, we should return the list as a response
+		peers := s.GetPeerList()
+		result, err := json.Marshal(peers)
+		if err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Failed to marshal peer list"}
+			return json.Marshal(resp)
 		}
-		s.ListPeers()
+		resp := ResponseMessage{Status: "Success", Result: string(result)}
+		return json.Marshal(resp)
 
 	}
 

@@ -25,13 +25,18 @@ func (p *Peer) Send(data []byte) error {
 }
 
 func (p *Peer) ReadLoop(s *Server) {
-	defer p.Conn.Close()
+	// When the loop exits (due to error or disconnection),
+	// remove the peer from the server's list and close the connection.
+	defer func() {
+		s.RemovePeer(p)
+		p.Conn.Close()
+	}()
 	reader := bufio.NewReader(p.Conn)
 
 	for { // 1. Read message
 		msg, err := reader.ReadBytes('\n')
 		if err != nil {
-			fmt.Printf("Peer %s disconnected\n", p.Conn.RemoteAddr())
+			fmt.Printf("Peer %s disconnected: %v\n", p.Conn.RemoteAddr(), err)
 			return
 		}
 

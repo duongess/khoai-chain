@@ -131,18 +131,19 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 FROM {{.ImageBase}} AS builder
 WORKDIR /app
 
-# 1. Copy generated main.go first. A change here MUST trigger a rebuild.
-COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
-
-# 2. Copy go.mod and go.sum to leverage Docker cache for dependencies
+# 1. Copy go.mod and go.sum to leverage Docker cache for dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 3. Copy the rest of the source code
+# 2. Copy the rest of the source code
 COPY cmd ./cmd
 COPY internal ./internal
 COPY pkg ./pkg
 COPY examples ./examples
+
+# 3. Copy the generated main.go, overwriting the placeholder from the previous step.
+#    This ensures the correct main file (with proper contract imports and config path) is used.
+COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
 
 # 4. Build the application binary
 RUN go build -o /khoai-node ./cmd/node
@@ -261,16 +262,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	// Import core
+	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/p2p"
 	"khoai-chain/pkg/cli"
-	"khoai-chain/examples"
 
 	{{range .Imports}}	"{{.}}"
 	{{end}}
@@ -282,12 +282,7 @@ var (
 
 func main() {
 	// 1. Setup config file discovery (logic to find it next to the exe)
-	exePath, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	exeDir := filepath.Dir(exePath)
-	defaultConfigPath := filepath.Join(exeDir, "config.yaml")
+	defaultConfigPath := filepath.Join("/app", "config.yaml")
 
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
@@ -332,22 +327,10 @@ func main() {
 		fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 		// 5. Initialize P2P Server
-		srv := p2p.NewServer(conf.Port, contractManager)
+		srv := p2p.NewServer(conf.Endpoint, contractManager)
 		go srv.Start()
 
-		// 6. Connect to Peers (After a short delay)
-		go func() {
-			time.Sleep(2 * time.Second)
-			if len(conf.Peers) > 0 {
-				fmt.Println("Peers list in config:", conf.Peers)
-				for _, peerAddr := range conf.Peers {
-					fmt.Printf("- Connecting to peer: %s\n", peerAddr)
-					srv.ConnectToPeer(peerAddr)
-				}
-			}
-		}()
-
-		// 7. Block main thread to keep the server running forever
+		// 6. Block main thread to keep the server running forever
 		select {}
 	})
 

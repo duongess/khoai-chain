@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"embed"
 	"fmt"
 	"khoai-chain/internal/config"
 	"khoai-chain/pkg/cli"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,6 +146,16 @@ func main() {
 		return runCommand("docker", "compose", "-f", composeFile, "logs", "-f", "--tail", "100", nodeToLog)
 	})
 
+	app.AddCommand("connect", "Connect to peer", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai connect <localhost:8000> <localhost:9000>")
+		}
+		address := args[0]
+		peerAddress := args[1]
+		sendToNode(address, fmt.Sprintf("{\"type\":\"CONNECT_PEER\", \"address\":\"%s\"}", peerAddress))
+		return nil
+	})
+
 	app.Run()
 }
 
@@ -222,4 +234,25 @@ func validateNodeName(configPath, nodeName string) error {
 
 func sanitize(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+}
+
+func sendToNode(serverAddress string, message string) {
+	conn, err := net.Dial("tcp", serverAddress)
+	if err != nil {
+		fmt.Printf("Error connecting to node: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, string(message)+"\n")
+
+	reader := bufio.NewReader(conn)
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Lost connection to server." + err.Error())
+		return
+	}
+
+	fmt.Println(response)
 }

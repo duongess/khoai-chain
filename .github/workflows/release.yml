@@ -1,0 +1,30 @@
+name: Custom Source Code Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Generate and Upload Zip
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Create clean zip archive
+        run: |
+          git archive --format=zip --output=khoai-src.zip HEAD
+
+      - name: Upload Zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: khoai-src.zip
+          generate_release_notes: true

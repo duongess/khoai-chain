@@ -54,35 +54,39 @@ Before you begin, ensure you have the following installed:
 ## ⚙️ Configuration
 
 The core configuration for your blockchain network is defined in `khoai-config.yaml`.
+This file is **optional**. If it doesn't exist, a default single-node network will be generated.
 
 ```yaml
-network_name: "Vietnam_Construction_Net"
-domain: "khoai.local"
+network:
+  name: "Vietnam_Construction_Net"
+  domain: "khoai.local"
 
-image_base: "golang:1.22-alpine"
-image_tag: "v1.0.0"
-registry: "registry.duongess.com/khoai-chain"
+docker:
+  image_base: "golang:1.22-alpine"
+  image_tag: "v1.0.0"
+  registry: "registry.duongess.com/khoai-chain"
 
-nodes:
-  - name: "node_vingroup"
-    port: 9000
-    db_path: "/data/vin_db"
-    peers: [] # First node, no initial peers
+organizations:
+  - display_name: "Vingroup"
+    metadata:
+      description: "Vingroup Organization"
+      website: "https://vingroup.com.vn"
     chaincodes:
+      - name: "sample-contract"
+        package: "khoai-chain/examples/contracts/sample" # Example path
+    nodes:
+      - id: "hn"
+        display_name: "Hanoi Node"
+        endpoint: "vingroup-hn.khoai.local:9000"
+      - id: "hcm"
+        display_name: "HCMC Node"
+        endpoint: "vingroup-hcm.khoai.local:9001"
 
-  - name: "node_coteccons"
-    port: 9001
-    db_path: "/data/coteccons_db"
-    peers:
-      - "node_vingroup:9000" # Connects to node_vingroup
-    chaincodes:
-
-  - name: "node_thachthat"
-    port: 9002
-    db_path: "/data/thachthat_db"
-    peers:
-      - "node_coteccons:9001" # Connects to node_coteccons
-    chaincodes:
+  - display_name: "Coteccons"
+    nodes:
+      - id: "main"
+        display_name: "Main Node"
+        endpoint: "coteccons-main.khoai.local:9002"
 ```
 
 -   **`network_name`**: The name of your blockchain network.

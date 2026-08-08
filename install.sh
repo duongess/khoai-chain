@@ -31,7 +31,6 @@ echo "Downloading ${FILE_NAME} to ${BUILD_DIR}/ ..." >&2
 curl -L -o "${OUTPUT_PATH}" "${DOWNLOAD_URL}"
 
 echo "Extracting source code from ${OUTPUT_PATH}..." >&2
-unzip -o "${OUTPUT_PATH}" -d .
 
 # Output the determined version to stdout for the Go program to capture
 echo "${VERSION}"

@@ -247,7 +247,7 @@ COPY examples ./examples
 
 # 3. Copy the generated main.go, overwriting the placeholder from the previous step.
 #    This ensures the correct main file (with proper contract imports and config path) is used.
-COPY build/{{.NodeName}}/main.go ./cmd/node/main.go
+COPY build/nodes/{{.NodeName}}/main.go ./cmd/node/main.go
 
 # 4. Build the application binary
 RUN go build -o /khoai-node ./cmd/node
@@ -261,7 +261,7 @@ RUN apk add --no-cache ca-certificates libc6-compat
 
 # 6. Copy the final binary from the builder stage and the config file
 COPY --from=builder /khoai-node .
-COPY build/{{.NodeName}}/config.yaml .
+COPY build/nodes/{{.NodeName}}/config.yaml .
 
 # 7. Setup for running
 RUN mkdir -p /app/data
@@ -335,7 +335,7 @@ services:
   {{.Name}}:
     build:
       context: ..  # Build context is the project root, relative to this compose file
-      dockerfile: ./build/{{.Name}}/Dockerfile # Path to the Dockerfile, relative to the context
+      dockerfile: ./build/nodes/{{.Name}}/Dockerfile # Path to the Dockerfile, relative to the context
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:

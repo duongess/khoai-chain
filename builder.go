@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"embed"
+	"flag"
 	"fmt"
 	"khoai-chain/internal/config"
 	"khoai-chain/pkg/cli"
@@ -28,8 +30,28 @@ func main() {
 	configPath := filepath.Join(cwd, config.ConfigFileName)
 
 	// --- COMMAND 1: GENERATE DOCKER ARTIFACTS ---
-	app.AddCommand("generate gen", "Generate Dockerfile & Compose configs", func(args []string) error {
-		if err := generateArtifacts(configPath); err != nil {
+	app.AddCommand("generate gen", "Download source and generate Docker configs", func(args []string) error {
+		// Create a flag set for this command
+		genFlags := flag.NewFlagSet("generate", flag.ExitOnError)
+		versionFlag := genFlags.String("version", "latest", "The source code version to download (e.g., v1.0.1)")
+
+		// Parse the arguments for this command
+		if err := genFlags.Parse(args); err != nil {
+			return err
+		}
+
+		version := *versionFlag
+
+		// 1. Download and extract source code
+		fmt.Printf("Downloading source code version: %s...\n", version)
+		downloadedVersion, err := downloadViaScript(version)
+		if err != nil {
+			return fmt.Errorf("failed to download source code: %w", err)
+		}
+		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
+
+		// 2. Generate artifacts
+		if err := generateArtifacts(configPath, downloadedVersion); err != nil {
 			return err
 		}
 
@@ -75,7 +97,8 @@ func main() {
 
 		// Always run generate first to ensure build files are up-to-date
 		fmt.Println("Checking and generating Docker configuration files...")
-		if err := generateArtifacts(configPath); err != nil {
+		// Pass empty version to skip download-related steps like creating .version file
+		if err := generateArtifacts(configPath, ""); err != nil {
 			return fmt.Errorf("could not generate configuration files: %w", err)
 		}
 		fmt.Println("Docker configuration has been created/updated.")
@@ -158,7 +181,17 @@ func main() {
 }
 
 // generateArtifacts extracts the logic from the original "generate" command.
-func generateArtifacts(configPath string) error {
+func generateArtifacts(configPath string, version string) error {
+	buildDir := "build"
+
+	// If a version is provided (from `gen` command), write the .version file.
+	// This is skipped when called from `start`.
+	if version != "" {
+		if err := os.WriteFile(filepath.Join(buildDir, ".version"), []byte(version), 0644); err != nil {
+			return fmt.Errorf("failed to write .version file: %w", err)
+		}
+	}
+
 	// 1. Load or create default config
 	builderConf, err := config.LoadBuilderConfig(configPath)
 	if err != nil {
@@ -166,8 +199,8 @@ func generateArtifacts(configPath string) error {
 	}
 
 	// 2. Create build artifacts directory
-	buildDir := "build"
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
+	nodesBaseDir := filepath.Join(buildDir, "nodes")
+	if err := os.MkdirAll(nodesBaseDir, 0755); err != nil {
 		return err
 	}
 
@@ -175,7 +208,7 @@ func generateArtifacts(configPath string) error {
 	for _, org := range builderConf.Organizations {
 		for _, node := range org.Nodes {
 			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
-			nodeDir := filepath.Join(buildDir, uniqueNodeName)
+			nodeDir := filepath.Join(nodesBaseDir, uniqueNodeName)
 			if err := os.MkdirAll(nodeDir, 0755); err != nil {
 				return err
 			}
@@ -191,6 +224,39 @@ func generateArtifacts(configPath string) error {
 	}
 
 	return nil
+}
+
+// downloadAndUnzipSource handles fetching and extracting the project source code from GitHub releases.
+func downloadViaScript(version string) (string, error) {
+	fmt.Printf("Starting process to download source code version: %s\n", version)
+
+	// Duong dan toi file kich ban bash (thay bang link raw GitHub cua ban)
+	scriptURL := "https://raw.githubusercontent.com/duongess/khoai-chain/main/install.sh"
+
+	// Tao cau lenh shell hoan chinh
+	shellCmd := fmt.Sprintf("curl -fsSL %s | bash -s -- %s", scriptURL, version)
+
+	// Thuc thi bang Bash tren he dieu hanh
+	cmd := exec.Command("bash", "-c", shellCmd)
+
+	// Bat dau ra stdout va stderr de hien thi cho nguoi dung
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	// Chay lenh va doi ket qua
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("error executing shell script:\n%s\nError details: %w", stderr.String(), err)
+	}
+
+	fmt.Println("Result from script:")
+	fmt.Println(out.String())
+
+	// The script is expected to print the downloaded version tag to stdout.
+	downloadedVersion := strings.TrimSpace(out.String())
+	return downloadedVersion, nil
 }
 
 // runCommand is a helper to execute shell commands and stream output.

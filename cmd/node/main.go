@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	// Import internal packages
 	"khoai-chain/examples"
@@ -23,12 +22,12 @@ var (
 
 func main() {
 	// 1. Setup config file discovery (logic to find it next to the exe)
-	exePath, err := os.Executable()
+	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
-	exeDir := filepath.Dir(exePath)
-	defaultConfigPath := filepath.Join(exeDir, "config.yaml")
+
+	defaultConfigPath := filepath.Join(cwd, "build/vingroup-hn/config.yaml")
 
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
@@ -112,21 +111,8 @@ func startNode(configPath string, isDevMode bool) {
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 	// 6. Initialize P2P Server
-	srv := p2p.NewServer(conf.Port, contractManager)
+	srv := p2p.NewServer(conf.Endpoint, contractManager)
 	go srv.Start()
-
-	// 7. Connect to Peers (After 2s)
-	go func() {
-		time.Sleep(2 * time.Second)
-		if len(conf.Peers) > 0 {
-			fmt.Println("Peers list in config:", conf.Peers)
-
-			for _, peerAddr := range conf.Peers {
-				fmt.Printf("- Connecting to peer: %s\n", peerAddr)
-				srv.ConnectToPeer(peerAddr)
-			}
-		}
-	}()
 
 	// 8. Block main thread to keep the server running forever
 	select {}

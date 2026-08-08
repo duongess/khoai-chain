@@ -11,12 +11,13 @@ import (
 )
 
 type ConfigContent struct {
-	NodeName   string            `yaml:"node_name"`
-	Host       string            `yaml:"host"`
-	Port       string            `yaml:"port"`
-	DBPath     string            `yaml:"db_path"`
-	Peers      []string          `yaml:"peers"`
-	Chaincodes []ChaincodeConfig `yaml:"chaincodes"` // Remember to define the ChaincodeConfig struct
+	NodeName     string            `yaml:"node_name"`
+	DBPath       string            `yaml:"db_path"`
+	Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
+	Organization string            `yaml:"organization"`
+	NodeID       string            `yaml:"node_id"`
+	DisplayName  string            `yaml:"display_name"`
+	Endpoint     string            `yaml:"endpoint"`
 }
 
 func LoadConfig(filePath string) (*ConfigContent, error) {

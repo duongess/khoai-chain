@@ -7,6 +7,12 @@ const (
 	MsgNewBlock  = "NEW_BLOCK"  // Case 2: Send if there's a new block
 	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
 	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
+
+	MsgConnectPeer    = "CONNECT_PEER"    // Case 3: New peer connects to old peer
+	MsgDisconnectPeer = "DISCONNECT_PEER" // Case 4: Peer disconnects from old peer
+	MsgJoinNetwork    = "JOIN_NETWORK"    // Case 5: New peer joins the network
+	MsgListPeers      = "LIST_PEERS"      // Case 6: Old peer lists all peers
+
 )
 
 // Request gửi qua TCP
@@ -33,4 +39,23 @@ type ResponseMessage struct {
 	Status string `json:"status"`
 	Result string `json:"result"`
 	Error  string `json:"error,omitempty"`
+}
+
+type ConnectPeerRequest struct {
+	Type    string `json:"type"`
+	Address string `json:"address"`
+}
+
+type DisconnectPeerRequest struct {
+	Type    string `json:"type"`
+	Address string `json:"address"`
+}
+
+type JoinNetworkRequest struct {
+	Type    string `json:"type"`
+	Address string `json:"address"`
+}
+
+type ListPeersRequest struct {
+	Type string `json:"type"`
 }

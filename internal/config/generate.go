@@ -18,7 +18,7 @@ func SetSourceCode(source embed.FS) {
 	sourceCode = source
 }
 
-// LoadBuilderConfig loads the configuration from khoai.yaml.
+// LoadBuilderConfig loads the configuration from khoai-config.yaml.
 // If the file does not exist, it returns a default configuration.
 // It also applies defaults for any missing optional sections.
 func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
@@ -27,7 +27,7 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("khoai.yaml not found, using default configuration.")
+			fmt.Println("khoai-config.yaml not found, using default configuration.")
 			cfg = *GetDefaultBuilderConfig()
 		} else {
 			return nil, fmt.Errorf("could not read config file %s: %w", configPath, err)
@@ -51,7 +51,7 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 
 // --- New Configuration Models ---
 
-// BuilderConfig is the root configuration structure from khoai.yaml
+// BuilderConfig is the root configuration structure from khoai-config.yaml
 type BuilderConfig struct {
 	Network       *NetworkConfig       `yaml:"network,omitempty"`
 	Docker        *DockerConfig        `yaml:"docker,omitempty"`
@@ -115,18 +115,6 @@ func GetDefaultBuilderConfig() *BuilderConfig {
 			ImageBase: "golang:1.22-alpine",
 			ImageTag:  "latest",
 			Registry:  "registry.duongess.com/khoai-chain",
-		},
-		Organizations: []OrganizationConfig{
-			{
-				DisplayName: "DefaultOrg",
-				Nodes: []RuntimeNodeConfig{
-					{
-						ID:          "node1",
-						DisplayName: "Default Node 1",
-						Endpoint:    "0.0.0.0:9000",
-					},
-				},
-			},
 		},
 	}
 }
@@ -193,7 +181,17 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing organization.yaml: %w", err)
 	}
 
-	// 3. Generate khoai.yaml (contains network and docker info)
+	// 3. Generate .version file
+	// The version is determined during `khoai generate` and should be passed down.
+	// For now, we assume a .version file exists in the root build dir.
+	versionData, err := os.ReadFile(filepath.Join(BuildDir, ".version"))
+	if err == nil {
+		if err := os.WriteFile(filepath.Join(orgDir, ".version"), versionData, 0644); err != nil {
+			return fmt.Errorf("error writing .version file for org: %w", err)
+		}
+	} // If it fails, we proceed without it, package command will fail later which is fine.
+
+	// 4. Generate khoai-config.yaml (contains network and docker info)
 	rootCfg := BuilderConfig{
 		Network: cfg.Network,
 		Docker:  cfg.Docker,
@@ -203,15 +201,15 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error marshalling root config: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(orgDir, ConfigFileName), rootYAML, 0644); err != nil {
-		return fmt.Errorf("error writing khoai.yaml: %w", err)
+		return fmt.Errorf("error writing khoai-config.yaml: %w", err)
 	}
 
-	// 4. Create empty contracts directory
+	// 5. Create empty contracts directory
 	if err := os.MkdirAll(filepath.Join(orgDir, "contracts"), 0755); err != nil {
 		return fmt.Errorf("could not create contracts directory: %w", err)
 	}
 
-	// 5. Generate artifacts for each node within the organization
+	// 6. Generate artifacts for each node within the organization
 	nodesBaseDir := filepath.Join(orgDir, "nodes")
 	if err := os.MkdirAll(nodesBaseDir, 0755); err != nil {
 		return fmt.Errorf("could not create nodes directory: %w", err)
@@ -328,6 +326,102 @@ CMD ["./khoai-node", "run"]
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
+	f, err := os.Create(filepath.Join(nodeDir, "Dockerfile"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return t.Execute(f, data)
+}
+
+// GenerateWorkspaceNodeArtifacts creates artifacts for a node within a workspace context.
+// The key difference is the Dockerfile paths, which are relative to the workspace root.
+func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
+	// A. Generate config.yaml for this node (to be included in the Image)
+	_, port, err := net.SplitHostPort(node.Endpoint)
+	if err != nil {
+		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
+	}
+	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
+
+	type RuntimeConfigContent struct {
+		NodeName     string            `yaml:"node_name"`
+		DBPath       string            `yaml:"db_path"`
+		Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
+		Organization string            `yaml:"organization"`
+		NodeID       string            `yaml:"node_id"`
+		DisplayName  string            `yaml:"display_name"`
+		Endpoint     string            `yaml:"endpoint"`
+	}
+
+	finalConfig := RuntimeConfigContent{
+		NodeName:     uniqueNodeName,
+		DBPath:       "/app/data",
+		Chaincodes:   org.Chaincodes,
+		Organization: org.DisplayName,
+		NodeID:       node.ID,
+		DisplayName:  node.DisplayName,
+		Endpoint:     listenEndpoint,
+	}
+
+	configContent, err := yaml.Marshal(finalConfig)
+	if err != nil {
+		return fmt.Errorf("error marshalling config: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(nodeDir, "config.yaml"), []byte(configContent), 0644); err != nil {
+		return err
+	}
+
+	// Generate the main.go file specific to this node's chaincodes
+	if err := generateMainFile(nodeDir, org.Chaincodes); err != nil {
+		return fmt.Errorf("error generating main.go: %v", err)
+	}
+
+	// B. Generate Dockerfile (Multi-stage build for WORKSPACE)
+	dockerfileTmpl := `
+# --- Stage 1: Builder ---
+FROM {{.ImageBase}} AS builder
+WORKDIR /app
+
+# 1. Copy go.mod and go.sum to leverage Docker cache for dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 2. Copy the rest of the source code
+COPY cmd ./cmd
+COPY internal ./internal
+COPY pkg ./pkg
+COPY examples ./examples
+
+# 3. Copy the generated main.go, overwriting the placeholder. Path is relative to build context (workspace root).
+COPY nodes/{{.NodeID}}/main.go ./cmd/node/main.go
+
+# 4. Build the application binary
+RUN go build -o /khoai-node ./cmd/node
+
+# --- Stage 2: Runner (Run the application) ---
+FROM alpine:3.19
+WORKDIR /app
+
+# 5. Copy the final binary from the builder stage and the config file
+COPY --from=builder /khoai-node .
+COPY nodes/{{.NodeID}}/config.yaml .
+
+# 6. Setup for running
+RUN mkdir -p /app/data
+EXPOSE {{.Port}}
+
+CMD ["./khoai-node", "run"]
+`
+	// Template data
+	data := map[string]interface{}{
+		"NodeID":    node.ID, // Use NodeID for path
+		"Port":      port,
+		"ImageBase": cfg.Docker.ImageBase,
+	}
+
+	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)
 	f, err := os.Create(filepath.Join(nodeDir, "Dockerfile"))
 	if err != nil {
 		return err

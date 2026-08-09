@@ -110,17 +110,61 @@ func main() {
 		return nil
 	})
 
-	// Build exe files
-	app.AddCommand("build b", "Build the khoai-node binary into the 'build/' directory", func(args []string) error {
-		targetDir := "build"
-
-		fmt.Printf("Building khoai-node binary into './%s' directory...\n", targetDir)
-
-		err := config.BuildExe(targetDir)
+	// REWRITTEN: `build` now generates node artifacts within a workspace, without overwriting existing ones.
+	app.AddCommand("build b", "Generate artifacts for new nodes in the workspace", func(args []string) error {
+		// 1. Check if we are in a workspace
+		isWorkspace, err := isWorkspaceContext()
 		if err != nil {
-			return fmt.Errorf("failed to build node: %v", err)
+			return err
+		}
+		if !isWorkspace {
+			return fmt.Errorf("the 'build' command can only be run inside an initialized workspace (missing organization.yaml)")
 		}
 
+		fmt.Println("Building node artifacts in workspace...")
+
+		// 2. Load configurations
+		rootConf, err := config.LoadBuilderConfig(config.ConfigFileName)
+		if err != nil {
+			return fmt.Errorf("could not load workspace khoai-config.yaml: %w", err)
+		}
+		orgData, err := os.ReadFile("organization.yaml")
+		if err != nil {
+			return fmt.Errorf("could not load workspace organization.yaml: %w", err)
+		}
+		var orgConf config.OrganizationConfig
+		if err := yaml.Unmarshal(orgData, &orgConf); err != nil {
+			return fmt.Errorf("could not parse workspace organization.yaml: %w", err)
+		}
+
+		// 3. Iterate through nodes and generate if not exists
+		nodesBaseDir := "nodes"
+		nodesGenerated := 0
+		for _, node := range orgConf.Nodes {
+			nodeDir := filepath.Join(nodesBaseDir, node.ID)
+
+			if _, err := os.Stat(nodeDir); !os.IsNotExist(err) {
+				fmt.Printf("- Node '%s' already exists, skipping.\n", node.ID)
+				continue
+			}
+
+			fmt.Printf("- Generating artifacts for new node: '%s'\n", node.ID)
+			if err := os.MkdirAll(nodeDir, 0755); err != nil {
+				return fmt.Errorf("could not create directory for node %s: %w", node.ID, err)
+			}
+
+			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(orgConf.DisplayName), node.ID)
+			if err := config.GenerateWorkspaceNodeArtifacts(nodeDir, node, orgConf, rootConf, uniqueNodeName); err != nil {
+				return fmt.Errorf("error creating files for node %s: %w", node.ID, err)
+			}
+			nodesGenerated++
+		}
+
+		if nodesGenerated > 0 {
+			fmt.Printf("\nSuccessfully generated artifacts for %d new node(s).\n", nodesGenerated)
+		} else {
+			fmt.Println("\nAll nodes are up-to-date. No new artifacts were generated.")
+		}
 		return nil
 	})
 

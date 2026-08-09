@@ -31,6 +31,8 @@ echo "Downloading ${FILE_NAME} to ${VERSION_DIR}/ ..." >&2
 curl -sSfL -o "${OUTPUT_PATH}" "${DOWNLOAD_URL}"
 
 echo "Extracting source code to ${VERSION_DIR}/..." >&2
+
+unzip -q -o "${OUTPUT_PATH}" -d "${VERSION_DIR}/"
 rm "${OUTPUT_PATH}"
 
 echo "${VERSION}"

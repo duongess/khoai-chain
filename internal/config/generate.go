@@ -1,7 +1,6 @@
 package config
 
 import (
-	"embed"
 	"fmt"
 	"html/template"
 	"net"
@@ -11,12 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-var sourceCode embed.FS
-
-func SetSourceCode(source embed.FS) {
-	sourceCode = source
-}
 
 // LoadBuilderConfig loads the configuration from khoai-config.yaml.
 // If the file does not exist, it returns a default configuration.

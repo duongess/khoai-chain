@@ -25,14 +25,9 @@ echo -n "${VERSION}" > "${TARGET_DIR}/.version"
 FILE_NAME="khoai-src.zip"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILE_NAME}"
 
-OUTPUT_PATH="${VERSION_DIR}/${FILE_NAME}_${VERSION}"
+OUTPUT_PATH="${VERSION_DIR}/khoai-src-${VERSION}.zip"
 
-echo "Downloading ${FILE_NAME} to ${VERSION_DIR}/ ..." >&2
+echo "Downloading ${FILE_NAME} to ${OUTPUT_PATH} ..." >&2
 curl -sSfL -o "${OUTPUT_PATH}" "${DOWNLOAD_URL}"
-
-echo "Extracting source code to ${VERSION_DIR}/..." >&2
-
-unzip -q -o "${OUTPUT_PATH}" -d "${VERSION_DIR}/"
-rm "${OUTPUT_PATH}"
 
 echo "${VERSION}"

@@ -44,20 +44,46 @@ func main() {
 
 		// 1. Download and extract source code
 		fmt.Printf("Downloading source code version: %s...\n", version)
-		downloadedVersion, err := downloadViaScript(version)
+		downloadedVersion, err := downloadViaScript(version, config.BuildDir)
 		if err != nil {
 			return fmt.Errorf("failed to download source code: %w", err)
 		}
 		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
 
 		// 2. Generate artifacts
-		if err := generateArtifacts(configPath, downloadedVersion); err != nil {
+		if err := generateArtifacts(configPath); err != nil {
 			return err
 		}
 
 		fmt.Printf("\nDONE! Files created in the 'build/' directory\n")
 		fmt.Println("- To start all nodes: khoai start all")
 		fmt.Println("- To start a single node: khoai start <node_name>")
+		return nil
+	})
+
+	app.AddCommand("init i", "Init a organization", func(args []string) error {
+		fmt.Println("Initializing organization...")
+
+		// Create a flag set for this command
+		genFlags := flag.NewFlagSet("init", flag.ExitOnError)
+		versionFlag := genFlags.String("version", "latest", "The source code version to download (e.g., v1.0.1)")
+
+		// Parse the arguments for this command
+		if err := genFlags.Parse(args); err != nil {
+			return err
+		}
+
+		version := *versionFlag
+
+		// 1. Download and extract source code
+		fmt.Printf("Downloading source code version: %s...\n", version)
+		downloadedVersion, err := downloadViaScript(version, "./")
+		if err != nil {
+			return fmt.Errorf("failed to download source code: %w", err)
+		}
+		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
+
+		fmt.Println("Organization initialized successfully.")
 		return nil
 	})
 
@@ -98,7 +124,7 @@ func main() {
 		// Always run generate first to ensure build files are up-to-date
 		fmt.Println("Checking and generating Docker configuration files...")
 		// Pass empty version to skip download-related steps like creating .version file
-		if err := generateArtifacts(configPath, ""); err != nil {
+		if err := generateArtifacts(configPath); err != nil {
 			return fmt.Errorf("could not generate configuration files: %w", err)
 		}
 		fmt.Println("Docker configuration has been created/updated.")
@@ -181,7 +207,7 @@ func main() {
 }
 
 // generateArtifacts extracts the logic from the original "generate" command.
-func generateArtifacts(configPath string, version string) error {
+func generateArtifacts(configPath string) error {
 	// The .version file is now created by the install.sh script during `khoai gen`.
 
 	// 1. Load or create default config
@@ -218,12 +244,12 @@ func generateArtifacts(configPath string, version string) error {
 }
 
 // downloadAndUnzipSource handles fetching and extracting the project source code from GitHub releases.
-func downloadViaScript(version string) (string, error) {
+func downloadViaScript(version string, targetDir string) (string, error) {
 	fmt.Printf("Starting process to download source code version: %s\n", version)
 
 	// Setup command to run the install.sh script with the specified version.
 	scriptURL := "https://raw.githubusercontent.com/duongess/khoai-chain/main/install.sh"
-	shellCmd := fmt.Sprintf("curl -fsSL %s | bash -s -- %s", scriptURL, version)
+	shellCmd := fmt.Sprintf("curl -fsSL %s | bash -s -- %s %s", scriptURL, version, targetDir)
 	cmd := exec.Command("bash", "-c", shellCmd)
 
 	// Capture stdout to get the version string returned by the script.

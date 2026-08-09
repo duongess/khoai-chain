@@ -22,10 +22,10 @@ jobs:
       - name: Create clean zip archive
         run: |
           # Dùng biến github.ref_name để chèn tên tag vào tên file
-          git archive --format=zip --output=khoai-src-${{ github.ref_name }}.zip HEAD
+          git archive --format=zip --output=khoai-src.zip HEAD
 
       - name: Upload Zip to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: khoai-src-${{ github.ref_name }}.zip
+          files: khoai-src.zip
           generate_release_notes: true

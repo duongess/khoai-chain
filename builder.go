@@ -69,10 +69,18 @@ func main() {
 	// REWRITTEN: `init` now creates a complete, self-contained workspace in the current directory.
 	app.AddCommand("init", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
 		fmt.Println("Initializing new Khoai organization workspace in the current directory...")
+		// Instead of aborting if workspace files exist, we'll just warn the user
+		// that configuration files will be overwritten. This makes `init` idempotent.
+		// Check if config.ConfigFileName exists
+		_, err1 := os.Stat(config.ConfigFileName)
+		configExists := !os.IsNotExist(err1)
 
-		// 1. Safety check to prevent overwriting an existing workspace
-		if _, err := os.Stat("organization.yaml"); !os.IsNotExist(err) {
-			return fmt.Errorf("directory already contains 'organization.yaml', initialization aborted")
+		// Check if organization.yaml exists
+		_, err2 := os.Stat("organization.yaml")
+		orgExists := !os.IsNotExist(err2)
+
+		if configExists || orgExists {
+			fmt.Println("Found existing workspace files. Configuration files will be overwritten.")
 		}
 
 		// 2. Download the latest source code into the current directory
@@ -302,23 +310,38 @@ func generateArtifacts(configPath string) error {
 func createDefaultWorkspaceFiles(dir string) error {
 	// Create default config files
 	defaultCfg := config.GetDefaultBuilderConfig()
-	cwd, _ := os.Getwd()
-	// Use the name of the directory as the default organization display name
-	defaultCfg.Organizations[0].DisplayName = filepath.Base(cwd)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("could not get current working directory: %w", err)
+	}
+	// Create a default organization based on the directory name
+	defaultOrg := config.OrganizationConfig{
+		DisplayName: filepath.Base(cwd),
+		Nodes: []config.RuntimeNodeConfig{
+			{
+				ID:          "node1",
+				DisplayName: "Default Node",
+				Endpoint:    "localhost:9000",
+			},
+		},
+	}
 
 	// organization.yaml
-	orgYAML, _ := yaml.Marshal(defaultCfg.Organizations[0])
+	orgYAML, err := yaml.Marshal(defaultOrg)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(filepath.Join(dir, "organization.yaml"), orgYAML, 0644); err != nil {
 		return err
 	}
 
 	// khoai-config.yaml
 	rootCfg := config.BuilderConfig{Network: defaultCfg.Network, Docker: defaultCfg.Docker}
-	rootYAML, _ := yaml.Marshal(rootCfg)
-	if err := os.WriteFile(filepath.Join(dir, config.ConfigFileName), rootYAML, 0644); err != nil {
+	rootYAML, err := yaml.Marshal(rootCfg)
+	if err != nil {
 		return err
 	}
-	return nil
+	return os.WriteFile(filepath.Join(dir, config.ConfigFileName), rootYAML, 0644)
 }
 
 // packageOrganization creates a .tar.gz archive of a generated organization.

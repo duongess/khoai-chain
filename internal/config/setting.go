@@ -3,7 +3,7 @@ package config
 import "path/filepath"
 
 const (
-	ConfigFileName = "khoai.yaml"
+	ConfigFileName = "khoai-config.yaml"
 	BuildDir       = "build"
 	DistDir        = "dist"
 	NodesBaseDir   = "/nodes"

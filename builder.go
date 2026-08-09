@@ -55,13 +55,6 @@ func main() {
 		}
 		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
 
-		// ADDED: Create a .version file in the build directory to track the source version
-		versionFilePath := filepath.Join(config.BuildDir, ".version")
-		if err := os.WriteFile(versionFilePath, []byte(downloadedVersion), 0644); err != nil {
-			return fmt.Errorf("failed to write .version file in build directory: %w", err)
-		}
-		fmt.Printf("Wrote version '%s' to '%s'\n", downloadedVersion, versionFilePath)
-
 		// 2. Generate artifacts
 		if err := generateArtifacts(configPath); err != nil {
 			return err
@@ -93,12 +86,7 @@ func main() {
 		}
 		fmt.Printf("Successfully downloaded version %s.\n", version)
 
-		// 3. Create the .version file to lock the source version for this workspace
-		if err := os.WriteFile(".version", []byte(version), 0644); err != nil {
-			return fmt.Errorf("failed to write .version file: %w", err)
-		}
-
-		// 4. Create the default workspace file structure and configurations
+		// 3. Create the default workspace file structure and configurations
 		fmt.Println("Creating workspace files...")
 		if err := os.MkdirAll("nodes", 0755); err != nil {
 			return err

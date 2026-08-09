@@ -116,18 +116,6 @@ func GetDefaultBuilderConfig() *BuilderConfig {
 			ImageTag:  "latest",
 			Registry:  "registry.duongess.com/khoai-chain",
 		},
-		Organizations: []OrganizationConfig{
-			{
-				DisplayName: "DefaultOrg",
-				Nodes: []RuntimeNodeConfig{
-					{
-						ID:          "node1",
-						DisplayName: "Default Node 1",
-						Endpoint:    "0.0.0.0:9000",
-					},
-				},
-			},
-		},
 	}
 }
 

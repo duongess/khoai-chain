@@ -1,0 +1,176 @@
+package main
+
+import (
+	"fmt"
+	"khoai-chain/internal/config"
+	"khoai-chain/pkg/cli"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
+// registerWorkspaceCommands đăng ký các lệnh liên quan đến workspace như 'init' và 'build'.
+func registerWorkspaceCommands(app *cli.CLI, configPath string) {
+	// Lệnh 'init' để khởi tạo một workspace mới.
+	app.AddCommand("init", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
+		fmt.Println("Initializing new Khoai organization workspace in the current directory...")
+		_, err1 := os.Stat(config.ConfigFileName)
+		configExists := !os.IsNotExist(err1)
+
+		_, err2 := os.Stat("organization.yaml")
+		orgExists := !os.IsNotExist(err2)
+
+		if configExists || orgExists {
+			fmt.Println("Found existing workspace files. Configuration files will be overwritten.")
+		}
+
+		fmt.Println("Downloading latest Khoai source code...")
+		version, err := downloadViaScript("latest", ".")
+		if err != nil {
+			return fmt.Errorf("failed to download source code: %w", err)
+		}
+		fmt.Printf("Successfully downloaded version %s.\n", version)
+
+		fmt.Println("Creating workspace files...")
+		if err := os.MkdirAll("nodes", 0755); err != nil {
+			return err
+		}
+		if err := os.MkdirAll("contracts", 0755); err != nil {
+			return err
+		}
+
+		if err := createDefaultWorkspaceFiles("."); err != nil {
+			return fmt.Errorf("failed to create default workspace files: %w", err)
+		}
+
+		cwd, _ := os.Getwd()
+		fmt.Printf("Successfully initialized workspace for organization '%s'.\n", filepath.Base(cwd))
+		return nil
+	})
+
+	// Lệnh 'build' để tạo các artifacts cho node trong workspace.
+	app.AddCommand("build b", "Generate artifacts for new nodes in the workspace", func(args []string) error {
+		isWorkspace, err := isWorkspaceContext()
+		if err != nil {
+			return err
+		}
+		if !isWorkspace {
+			return fmt.Errorf("the 'build' command can only be run inside an initialized workspace (missing organization.yaml)")
+		}
+
+		fmt.Println("Building node artifacts in workspace...")
+
+		rootConf, err := config.LoadBuilderConfig(config.ConfigFileName)
+		if err != nil {
+			return fmt.Errorf("could not load workspace khoai-config.yaml: %w", err)
+		}
+		orgData, err := os.ReadFile("organization.yaml")
+		if err != nil {
+			return fmt.Errorf("could not load workspace organization.yaml: %w", err)
+		}
+		var orgConf config.OrganizationConfig
+		if err := yaml.Unmarshal(orgData, &orgConf); err != nil {
+			return fmt.Errorf("could not parse workspace organization.yaml: %w", err)
+		}
+
+		nodesBaseDir := "nodes"
+		nodesGenerated := 0
+		for _, node := range orgConf.Nodes {
+			nodeDir := filepath.Join(nodesBaseDir, node.ID)
+
+			if _, err := os.Stat(nodeDir); !os.IsNotExist(err) {
+				fmt.Printf("- Node '%s' already exists, skipping.\n", node.ID)
+				continue
+			}
+
+			fmt.Printf("- Generating artifacts for new node: '%s'\n", node.ID)
+			if err := os.MkdirAll(nodeDir, 0755); err != nil {
+				return fmt.Errorf("could not create directory for node %s: %w", node.ID, err)
+			}
+
+			uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(orgConf.DisplayName), node.ID)
+			if err := config.GenerateWorkspaceNodeArtifacts(nodeDir, node, orgConf, rootConf, uniqueNodeName); err != nil {
+				return fmt.Errorf("error creating files for node %s: %w", node.ID, err)
+			}
+			nodesGenerated++
+		}
+
+		if nodesGenerated > 0 {
+			fmt.Printf("\nSuccessfully generated artifacts for %d new node(s).\n", nodesGenerated)
+		} else {
+			fmt.Println("\nAll nodes are up-to-date. No new artifacts were generated.")
+		}
+		return nil
+	})
+}
+
+// createDefaultWorkspaceFiles tạo các file cấu hình mặc định cho một workspace.
+func createDefaultWorkspaceFiles(dir string) error {
+	defaultCfg := config.GetDefaultBuilderConfig()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("could not get current working directory: %w", err)
+	}
+	defaultOrg := config.OrganizationConfig{
+		DisplayName: filepath.Base(cwd),
+		Nodes: []config.RuntimeNodeConfig{
+			{ID: "node1", DisplayName: "Default Node", Endpoint: "localhost:9000"},
+		},
+	}
+
+	orgYAML, err := yaml.Marshal(defaultOrg)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "organization.yaml"), orgYAML, 0644); err != nil {
+		return err
+	}
+
+	rootCfg := config.BuilderConfig{Network: defaultCfg.Network, Docker: defaultCfg.Docker}
+	rootYAML, err := yaml.Marshal(rootCfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, config.ConfigFileName), rootYAML, 0644)
+}
+
+// isWorkspaceContext kiểm tra xem thư mục hiện tại có phải là một workspace hay không.
+func isWorkspaceContext() (bool, error) {
+	if _, err := os.Stat("organization.yaml"); err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else {
+		return false, err
+	}
+}
+
+// generateWorkspaceCompose tạo file docker-compose.yaml trong một workspace.
+func generateWorkspaceCompose(composePath string) error {
+	rootConf, err := config.LoadBuilderConfig(config.ConfigFileName)
+	if err != nil {
+		return fmt.Errorf("could not load workspace khoai-config.yaml: %w", err)
+	}
+
+	orgData, err := os.ReadFile("organization.yaml")
+	if err != nil {
+		return fmt.Errorf("could not load workspace organization.yaml: %w", err)
+	}
+	var orgConf config.OrganizationConfig
+	if err := yaml.Unmarshal(orgData, &orgConf); err != nil {
+		return fmt.Errorf("could not parse workspace organization.yaml: %w", err)
+	}
+
+	workspaceBuilderConfig := &config.BuilderConfig{
+		Network:       rootConf.Network,
+		Docker:        rootConf.Docker,
+		Organizations: []config.OrganizationConfig{orgConf},
+	}
+
+	if err := config.GenerateWorkspaceDockerCompose(".", workspaceBuilderConfig); err != nil {
+		return err
+	}
+	fmt.Println("Generated workspace docker-compose.yaml")
+	return nil
+}

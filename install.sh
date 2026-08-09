@@ -28,7 +28,7 @@ DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${FILE_NAM
 OUTPUT_PATH="${VERSION_DIR}/${FILE_NAME}_${VERSION}"
 
 echo "Downloading ${FILE_NAME} to ${VERSION_DIR}/ ..." >&2
-curl -L -o "${OUTPUT_PATH}" "${DOWNLOAD_URL}"
+curl -sSfL -o "${OUTPUT_PATH}" "${DOWNLOAD_URL}"
 
 echo "Extracting source code to ${VERSION_DIR}/..." >&2
 rm "${OUTPUT_PATH}"

@@ -177,10 +177,63 @@ func ValidateBuilderConfig(cfg *BuilderConfig) error {
 	return nil
 }
 
-// --- LOGIC TO GENERATE CONFIG FILE FOR EACH NODE ---
+// GenerateOrganizationArtifacts creates all necessary files for a single organization.
+func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *BuilderConfig) error {
+	// 1. Create the base directory for the organization
+	if err := os.MkdirAll(orgDir, 0755); err != nil {
+		return fmt.Errorf("could not create organization directory %s: %w", orgDir, err)
+	}
+
+	// 2. Generate organization.yaml (contains only this org's config)
+	orgYAML, err := yaml.Marshal(org)
+	if err != nil {
+		return fmt.Errorf("error marshalling organization config: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(orgDir, "organization.yaml"), orgYAML, 0644); err != nil {
+		return fmt.Errorf("error writing organization.yaml: %w", err)
+	}
+
+	// 3. Generate khoai.yaml (contains network and docker info)
+	rootCfg := BuilderConfig{
+		Network: cfg.Network,
+		Docker:  cfg.Docker,
+	}
+	rootYAML, err := yaml.Marshal(rootCfg)
+	if err != nil {
+		return fmt.Errorf("error marshalling root config: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(orgDir, ConfigFileName), rootYAML, 0644); err != nil {
+		return fmt.Errorf("error writing khoai.yaml: %w", err)
+	}
+
+	// 4. Create empty contracts directory
+	if err := os.MkdirAll(filepath.Join(orgDir, "contracts"), 0755); err != nil {
+		return fmt.Errorf("could not create contracts directory: %w", err)
+	}
+
+	// 5. Generate artifacts for each node within the organization
+	nodesBaseDir := filepath.Join(orgDir, "nodes")
+	if err := os.MkdirAll(nodesBaseDir, 0755); err != nil {
+		return fmt.Errorf("could not create nodes directory: %w", err)
+	}
+
+	for _, node := range org.Nodes {
+		nodeDir := filepath.Join(nodesBaseDir, node.ID)
+		if err := os.MkdirAll(nodeDir, 0755); err != nil {
+			return err
+		}
+		// Pass the unique name for the Dockerfile template
+		uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
+		if err := GenerateNodeArtifacts(nodeDir, node, org, cfg, uniqueNodeName); err != nil {
+			return fmt.Errorf("error creating files for node %s: %w", node.ID, err)
+		}
+	}
+
+	return nil
+}
 
 // GenerateNodeArtifacts creates the config.yaml, Dockerfile, and main.go for a single node.
-func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig) error {
+func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
@@ -189,8 +242,6 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
 	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
-
-	uniqueNodeName := fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID)
 
 	// This struct defines the content of the generated runtime config.yaml.
 	// It includes new fields for organization/node info while retaining
@@ -271,7 +322,7 @@ CMD ["./khoai-node", "run"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeName":  uniqueNodeName,
+		"NodeName":  uniqueNodeName, // This is still needed for the COPY path
 		"Port":      port,
 		"ImageBase": cfg.Docker.ImageBase,
 	}
@@ -291,20 +342,25 @@ CMD ["./khoai-node", "run"]
 func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	// We need to create a flat list of nodes for the template.
 	type ComposeNodeInfo struct {
-		Name string // unique name: vingroup-hn
-		Port string
+		Name    string // unique name: vingroup-hn
+		OrgName string // sanitized org name: vingroup
+		NodeID  string // node id: hn
+		Port    string
 	}
 	var allNodes []ComposeNodeInfo
 
 	for _, org := range cfg.Organizations {
+		sanitizedOrgName := sanitize(org.DisplayName)
 		for _, node := range org.Nodes {
 			_, port, err := net.SplitHostPort(node.Endpoint)
 			if err != nil {
 				return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 			}
 			allNodes = append(allNodes, ComposeNodeInfo{
-				Name: fmt.Sprintf("%s-%s", sanitize(org.DisplayName), node.ID),
-				Port: port,
+				Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+				OrgName: sanitizedOrgName,
+				NodeID:  node.ID,
+				Port:    port,
 			})
 		}
 	}
@@ -335,7 +391,7 @@ services:
   {{.Name}}:
     build:
       context: ..  # Build context is the project root, relative to this compose file
-      dockerfile: ./build/nodes/{{.Name}}/Dockerfile # Path to the Dockerfile, relative to the context
+      dockerfile: ./build/organizations/{{.OrgName}}/nodes/{{.NodeID}}/Dockerfile # Path to the Dockerfile, relative to the context
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
@@ -348,6 +404,71 @@ services:
 {{end}}
 `
 	t, _ := template.New("compose").Parse(composeTmpl)
+	f, err := os.Create(filepath.Join(baseDir, "docker-compose.yaml"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return t.Execute(f, templateData)
+}
+
+// GenerateWorkspaceDockerCompose creates a docker-compose.yaml file for a single organization workspace.
+func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
+	type ComposeNodeInfo struct {
+		Name   string // unique name: vingroup-hn
+		NodeID string // node id: hn
+		Port   string
+	}
+	var allNodes []ComposeNodeInfo
+
+	// In a workspace, there's only one organization
+	org := cfg.Organizations[0]
+	sanitizedOrgName := sanitize(org.DisplayName)
+	for _, node := range org.Nodes {
+		_, port, err := net.SplitHostPort(node.Endpoint)
+		if err != nil {
+			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
+		}
+		allNodes = append(allNodes, ComposeNodeInfo{
+			Name:   fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			NodeID: node.ID,
+			Port:   port,
+		})
+	}
+
+	type ComposeTemplateData struct {
+		Registry string
+		ImageTag string
+		Nodes    []ComposeNodeInfo
+	}
+
+	templateData := ComposeTemplateData{
+		Registry: cfg.Docker.Registry,
+		ImageTag: cfg.Docker.ImageTag,
+		Nodes:    allNodes,
+	}
+
+	composeTmpl := `version: "3.9"
+
+services:
+{{range .Nodes}}
+  {{.Name}}:
+    build:
+      context: .
+      dockerfile: ./nodes/{{.NodeID}}/Dockerfile
+    image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
+    container_name: {{.Name}}
+    ports:
+      - "{{.Port}}:{{.Port}}"
+    volumes:
+      - ./data/{{.Name}}:/app/data
+    restart: always
+{{end}}
+`
+	t, err := template.New("compose-workspace").Parse(composeTmpl)
+	if err != nil {
+		return err
+	}
 	f, err := os.Create(filepath.Join(baseDir, "docker-compose.yaml"))
 	if err != nil {
 		return err

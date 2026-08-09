@@ -181,7 +181,17 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing organization.yaml: %w", err)
 	}
 
-	// 3. Generate khoai-config.yaml (contains network and docker info)
+	// 3. Generate .version file
+	// The version is determined during `khoai generate` and should be passed down.
+	// For now, we assume a .version file exists in the root build dir.
+	versionData, err := os.ReadFile(filepath.Join(BuildDir, ".version"))
+	if err == nil {
+		if err := os.WriteFile(filepath.Join(orgDir, ".version"), versionData, 0644); err != nil {
+			return fmt.Errorf("error writing .version file for org: %w", err)
+		}
+	} // If it fails, we proceed without it, package command will fail later which is fine.
+
+	// 4. Generate khoai-config.yaml (contains network and docker info)
 	rootCfg := BuilderConfig{
 		Network: cfg.Network,
 		Docker:  cfg.Docker,
@@ -194,12 +204,12 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing khoai-config.yaml: %w", err)
 	}
 
-	// 4. Create empty contracts directory
+	// 5. Create empty contracts directory
 	if err := os.MkdirAll(filepath.Join(orgDir, "contracts"), 0755); err != nil {
 		return fmt.Errorf("could not create contracts directory: %w", err)
 	}
 
-	// 5. Generate artifacts for each node within the organization
+	// 6. Generate artifacts for each node within the organization
 	nodesBaseDir := filepath.Join(orgDir, "nodes")
 	if err := os.MkdirAll(nodesBaseDir, 0755); err != nil {
 		return fmt.Errorf("could not create nodes directory: %w", err)

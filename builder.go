@@ -74,9 +74,6 @@ func main() {
 		if _, err := os.Stat("organization.yaml"); !os.IsNotExist(err) {
 			return fmt.Errorf("directory already contains 'organization.yaml', initialization aborted")
 		}
-		if _, err := os.Stat(config.ConfigFileName); !os.IsNotExist(err) {
-			return fmt.Errorf("directory already contains '%s', initialization aborted", config.ConfigFileName)
-		}
 
 		// 2. Download the latest source code into the current directory
 		fmt.Println("Downloading latest Khoai source code...")
@@ -339,10 +336,10 @@ func packageOrganization(orgName, configPath string) error {
 		return err
 	}
 
-	// Read the version from the .version file created by `khoai generate`
-	versionData, err := os.ReadFile(filepath.Join(config.BuildDir, ".version"))
+	// Read the version from the .version file inside the organization's build directory
+	versionData, err := os.ReadFile(filepath.Join(orgSrcDir, ".version"))
 	if err != nil {
-		return fmt.Errorf("'.version' file not found in build directory. Please run 'khoai generate' first: %w", err)
+		return fmt.Errorf("'.version' file not found in organization build directory '%s'. Please run 'khoai generate' first: %w", orgSrcDir, err)
 	}
 	version := strings.TrimSpace(string(versionData))
 
@@ -359,19 +356,6 @@ func packageOrganization(orgName, configPath string) error {
 	defer gw.Close()
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
-
-	// Manually add the .version file to the root of the organization dir in the archive
-	hdr := &tar.Header{
-		Name: filepath.Join(sanitizedName, ".version"),
-		Mode: 0644,
-		Size: int64(len(versionData)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return fmt.Errorf("failed to write .version header to archive: %w", err)
-	}
-	if _, err := tw.Write(versionData); err != nil {
-		return fmt.Errorf("failed to write .version content to archive: %w", err)
-	}
 
 	// Walk the organization source directory and add files to tar
 	err = filepath.Walk(orgSrcDir, func(path string, info os.FileInfo, err error) error {

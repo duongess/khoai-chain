@@ -55,6 +55,13 @@ func main() {
 		}
 		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
 
+		// ADDED: Create a .version file in the build directory to track the source version
+		versionFilePath := filepath.Join(config.BuildDir, ".version")
+		if err := os.WriteFile(versionFilePath, []byte(downloadedVersion), 0644); err != nil {
+			return fmt.Errorf("failed to write .version file in build directory: %w", err)
+		}
+		fmt.Printf("Wrote version '%s' to '%s'\n", downloadedVersion, versionFilePath)
+
 		// 2. Generate artifacts
 		if err := generateArtifacts(configPath); err != nil {
 			return err
@@ -66,29 +73,47 @@ func main() {
 		return nil
 	})
 
-	app.AddCommand("init i", "Init a organization", func(args []string) error {
-		fmt.Println("Initializing organization...")
+	// REWRITTEN: `init` now creates a complete, self-contained workspace in the current directory.
+	app.AddCommand("init", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
+		fmt.Println("Initializing new Khoai organization workspace in the current directory...")
 
-		// Create a flag set for this command
-		genFlags := flag.NewFlagSet("init", flag.ExitOnError)
-		versionFlag := genFlags.String("version", "latest", "The source code version to download (e.g., v1.0.1)")
-
-		// Parse the arguments for this command
-		if err := genFlags.Parse(args); err != nil {
-			return err
+		// 1. Safety check to prevent overwriting an existing workspace
+		if _, err := os.Stat("organization.yaml"); !os.IsNotExist(err) {
+			return fmt.Errorf("directory already contains 'organization.yaml', initialization aborted")
+		}
+		if _, err := os.Stat(config.ConfigFileName); !os.IsNotExist(err) {
+			return fmt.Errorf("directory already contains '%s', initialization aborted", config.ConfigFileName)
 		}
 
-		version := *versionFlag
-
-		// 1. Download and extract source code
-		fmt.Printf("Downloading source code version: %s...\n", version)
-		downloadedVersion, err := downloadViaScript(version, "./")
+		// 2. Download the latest source code into the current directory
+		fmt.Println("Downloading latest Khoai source code...")
+		version, err := downloadViaScript("latest", ".") // Download to current dir "."
 		if err != nil {
 			return fmt.Errorf("failed to download source code: %w", err)
 		}
-		fmt.Printf("Successfully downloaded and extracted version %s.\n", downloadedVersion)
+		fmt.Printf("Successfully downloaded version %s.\n", version)
 
-		fmt.Println("Organization initialized successfully.")
+		// 3. Create the .version file to lock the source version for this workspace
+		if err := os.WriteFile(".version", []byte(version), 0644); err != nil {
+			return fmt.Errorf("failed to write .version file: %w", err)
+		}
+
+		// 4. Create the default workspace file structure and configurations
+		fmt.Println("Creating workspace files...")
+		if err := os.MkdirAll("nodes", 0755); err != nil {
+			return err
+		}
+		if err := os.MkdirAll("contracts", 0755); err != nil {
+			return err
+		}
+
+		// Generate default config files (organization.yaml, khoai-config.yaml)
+		if err := createDefaultWorkspaceFiles("."); err != nil {
+			return fmt.Errorf("failed to create default workspace files: %w", err)
+		}
+
+		cwd, _ := os.Getwd()
+		fmt.Printf("Successfully initialized workspace for organization '%s'.\n", filepath.Base(cwd))
 		return nil
 	})
 
@@ -121,14 +146,12 @@ func main() {
 
 	// --- COMMAND: ORG ---
 	app.AddCommand("org", "Manage organizations", func(args []string) error {
-		if len(args) < 2 {
-			fmt.Println("Invalid command. Use 'org init <name>' or 'org package <name>'.")
+		if len(args) < 2 || args[0] != "package" {
+			fmt.Println("Invalid command. Use 'org package <name>'.")
 			return nil
 		}
 		action, name := args[0], args[1]
 		switch action {
-		case "init":
-			return initOrganization(name)
 		case "package":
 			return packageOrganization(name, configPath)
 		default:
@@ -291,50 +314,31 @@ func generateArtifacts(configPath string) error {
 }
 
 // initOrganization creates a new, empty organization workspace.
-func initOrganization(orgName string) error {
-	fmt.Printf("Initializing new organization workspace: %s\n", orgName)
-	sanitizedName := sanitize(orgName)
-	if _, err := os.Stat(sanitizedName); !os.IsNotExist(err) {
-		return fmt.Errorf("directory '%s' already exists", sanitizedName)
-	}
-
-	// Create directory structure
-	if err := os.MkdirAll(filepath.Join(sanitizedName, "nodes"), 0755); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Join(sanitizedName, "contracts"), 0755); err != nil {
-		return err
-	}
-
+func createDefaultWorkspaceFiles(dir string) error {
 	// Create default config files
 	defaultCfg := config.GetDefaultBuilderConfig()
-	defaultCfg.Organizations[0].DisplayName = orgName
+	cwd, _ := os.Getwd()
+	// Use the name of the directory as the default organization display name
+	defaultCfg.Organizations[0].DisplayName = filepath.Base(cwd)
 
 	// organization.yaml
 	orgYAML, _ := yaml.Marshal(defaultCfg.Organizations[0])
-	if err := os.WriteFile(filepath.Join(sanitizedName, "organization.yaml"), orgYAML, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "organization.yaml"), orgYAML, 0644); err != nil {
 		return err
 	}
 
-	// khoai.yaml
+	// khoai-config.yaml
 	rootCfg := config.BuilderConfig{Network: defaultCfg.Network, Docker: defaultCfg.Docker}
 	rootYAML, _ := yaml.Marshal(rootCfg)
-	if err := os.WriteFile(filepath.Join(sanitizedName, config.ConfigFileName), rootYAML, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, config.ConfigFileName), rootYAML, 0644); err != nil {
 		return err
 	}
-
-	fmt.Printf("Successfully created organization workspace in './%s/'\n", sanitizedName)
 	return nil
 }
 
 // packageOrganization creates a .tar.gz archive of a generated organization.
 func packageOrganization(orgName, configPath string) error {
 	fmt.Printf("Packaging organization: %s\n", orgName)
-
-	// Ensure artifacts are generated first
-	if err := generateArtifacts(configPath); err != nil {
-		return fmt.Errorf("failed to generate artifacts before packaging: %w", err)
-	}
 
 	sanitizedName := sanitize(orgName)
 	orgSrcDir := filepath.Join(config.BuildDir, config.OrgsDir, sanitizedName)
@@ -347,10 +351,14 @@ func packageOrganization(orgName, configPath string) error {
 		return err
 	}
 
-	// Create package file
-	// TODO: Use a real version
-	version := "1.0.0"
-	packageName := fmt.Sprintf("%s-khoai-v%s.tar.gz", sanitizedName, version)
+	// Read the version from the .version file created by `khoai generate`
+	versionData, err := os.ReadFile(filepath.Join(config.BuildDir, ".version"))
+	if err != nil {
+		return fmt.Errorf("'.version' file not found in build directory. Please run 'khoai generate' first: %w", err)
+	}
+	version := strings.TrimSpace(string(versionData))
+
+	packageName := fmt.Sprintf("%s-khoai-%s.tar.gz", sanitizedName, version)
 	packagePath := filepath.Join(config.DistDir, packageName)
 	file, err := os.Create(packagePath)
 	if err != nil {
@@ -364,8 +372,21 @@ func packageOrganization(orgName, configPath string) error {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
+	// Manually add the .version file to the root of the organization dir in the archive
+	hdr := &tar.Header{
+		Name: filepath.Join(sanitizedName, ".version"),
+		Mode: 0644,
+		Size: int64(len(versionData)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return fmt.Errorf("failed to write .version header to archive: %w", err)
+	}
+	if _, err := tw.Write(versionData); err != nil {
+		return fmt.Errorf("failed to write .version content to archive: %w", err)
+	}
+
 	// Walk the organization source directory and add files to tar
-	return filepath.Walk(orgSrcDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(orgSrcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -401,6 +422,12 @@ func packageOrganization(orgName, configPath string) error {
 		}
 		return nil
 	})
+
+	if err != nil {
+		return fmt.Errorf("failed to archive organization directory: %w", err)
+	}
+	fmt.Printf("Successfully created package: %s\n", packagePath)
+	return nil
 }
 
 // installOrganization extracts a package into a new workspace.
@@ -442,6 +469,9 @@ func installOrganization(packagePath string) error {
 
 	// Reset reader to process all files
 	file.Seek(0, 0)
+	if err != nil {
+		return fmt.Errorf("failed to seek in package file: %w", err)
+	}
 	gr.Reset(file)
 	tr = tar.NewReader(gr)
 
@@ -466,19 +496,46 @@ func installOrganization(packagePath string) error {
 				return err
 			}
 		case tar.TypeReg:
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			// This is the fix: Ensure the parent directory for the file exists.
+			// This handles archives where file entries might appear before their directory entries.
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for %s: %w", target, err)
+			}
+
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create file %s: %w", target, err)
 			}
 			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
+				f.Close() // Close file on copy error
+				return fmt.Errorf("failed to write content to file %s: %w", target, err)
 			}
-			f.Close()
+			f.Close() // Close file on success
 		}
 	}
 
-	fmt.Printf("Successfully installed organization to '%s'\n", targetDir)
+	fmt.Printf("Successfully extracted organization to '%s'\n", targetDir)
+
+	// Read the .version file from the newly extracted workspace
+	versionFilePath := filepath.Join(targetDir, ".version")
+	versionData, err := os.ReadFile(versionFilePath)
+	if err != nil {
+		return fmt.Errorf("installation failed: package is missing required '.version' file: %w", err)
+	}
+	version := strings.TrimSpace(string(versionData))
+	if version == "" {
+		return fmt.Errorf("installation failed: '.version' file is empty or invalid")
+	}
+
+	// Download the exact source code version required by the package
+	fmt.Printf("Organization requires Khoai source version: %s. Downloading...\n", version)
+	_, err = downloadViaScript(version, targetDir)
+	if err != nil {
+		return fmt.Errorf("failed to download required source code version '%s': %w", version, err)
+	}
+
+	fmt.Printf("Successfully downloaded source code for version %s.\n", version)
+	fmt.Println("Installation complete.")
 	return nil
 }
 
@@ -532,10 +589,10 @@ func isWorkspaceContext() (bool, error) {
 
 // generateWorkspaceCompose generates a docker-compose.yaml file within a workspace.
 func generateWorkspaceCompose(composePath string) error {
-	// Load khoai.yaml for network/docker settings
+	// Load khoai-config.yaml for network/docker settings
 	rootConf, err := config.LoadBuilderConfig(config.ConfigFileName)
 	if err != nil {
-		return fmt.Errorf("could not load workspace khoai.yaml: %w", err)
+		return fmt.Errorf("could not load workspace khoai-config.yaml: %w", err)
 	}
 
 	// Load organization.yaml for org/node settings

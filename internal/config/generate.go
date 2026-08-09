@@ -18,7 +18,7 @@ func SetSourceCode(source embed.FS) {
 	sourceCode = source
 }
 
-// LoadBuilderConfig loads the configuration from khoai.yaml.
+// LoadBuilderConfig loads the configuration from khoai-config.yaml.
 // If the file does not exist, it returns a default configuration.
 // It also applies defaults for any missing optional sections.
 func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
@@ -27,7 +27,7 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("khoai.yaml not found, using default configuration.")
+			fmt.Println("khoai-config.yaml not found, using default configuration.")
 			cfg = *GetDefaultBuilderConfig()
 		} else {
 			return nil, fmt.Errorf("could not read config file %s: %w", configPath, err)
@@ -51,7 +51,7 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 
 // --- New Configuration Models ---
 
-// BuilderConfig is the root configuration structure from khoai.yaml
+// BuilderConfig is the root configuration structure from khoai-config.yaml
 type BuilderConfig struct {
 	Network       *NetworkConfig       `yaml:"network,omitempty"`
 	Docker        *DockerConfig        `yaml:"docker,omitempty"`
@@ -193,7 +193,7 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing organization.yaml: %w", err)
 	}
 
-	// 3. Generate khoai.yaml (contains network and docker info)
+	// 3. Generate khoai-config.yaml (contains network and docker info)
 	rootCfg := BuilderConfig{
 		Network: cfg.Network,
 		Docker:  cfg.Docker,
@@ -203,7 +203,7 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error marshalling root config: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(orgDir, ConfigFileName), rootYAML, 0644); err != nil {
-		return fmt.Errorf("error writing khoai.yaml: %w", err)
+		return fmt.Errorf("error writing khoai-config.yaml: %w", err)
 	}
 
 	// 4. Create empty contracts directory

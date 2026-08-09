@@ -12,6 +12,27 @@ import (
 
 // registerWorkspaceCommands đăng ký các lệnh liên quan đến workspace như 'init' và 'build'.
 func registerWorkspaceCommands(app *cli.CLI, configPath string) {
+
+	app.AddCommand("generate gen", "Download source and generate mess", func(args []string) error {
+		// 1. Download source code
+		fmt.Println("Downloading latest Khoai source code...")
+		version, err := downloadViaScript("latest", ".")
+		if err != nil {
+			return fmt.Errorf("failed to download source code: %w", err)
+		}
+		fmt.Printf("Successfully downloaded and extracted version %s.\n", version)
+
+		// 2. Generate artifacts
+		if err := generateArtifacts(configPath); err != nil {
+			return err
+		}
+
+		fmt.Printf("\nDONE! Files created in the 'build/' directory\n")
+		fmt.Println("- To start all nodes: khoai start all")
+		fmt.Println("- To start a single node: khoai start <node_name>")
+		return nil
+	})
+
 	// Lệnh 'init' để khởi tạo một workspace mới.
 	app.AddCommand("init", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
 		fmt.Println("Initializing new Khoai organization workspace in the current directory...")

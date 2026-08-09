@@ -16,7 +16,7 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 	app.AddCommand("generate gen", "Download source and generate mess", func(args []string) error {
 		// 1. Download source code
 		fmt.Println("Downloading latest Khoai source code...")
-		version, err := downloadViaScript("latest", ".")
+		version, err := downloadViaScript("latest", config.BuildDir)
 		if err != nil {
 			return fmt.Errorf("failed to download source code: %w", err)
 		}

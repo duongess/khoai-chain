@@ -8,11 +8,12 @@ const (
 	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
 	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
 
-	MsgConnectPeer    = "CONNECT_PEER"    // Case 3: New peer connects to old peer
-	MsgDisconnectPeer = "DISCONNECT_PEER" // Case 4: Peer disconnects from old peer
-	MsgJoinNetwork    = "JOIN_NETWORK"    // Case 5: New peer joins the network
-	MsgListPeers      = "LIST_PEERS"      // Case 6: Old peer lists all peers
-
+	// Dynamic peer membership messages. Server peer operations remain local
+	// operations; they are deliberately not exposed as protocol messages.
+	MsgJoinNetwork  = "JOIN_NETWORK"
+	MsgAcceptJoin   = "ACCEPT_JOIN"
+	MsgLeaveNetwork = "LEAVE_NETWORK"
+	MsgPeerList     = "PEER_LIST"
 )
 
 // Request gửi qua TCP
@@ -41,21 +42,25 @@ type ResponseMessage struct {
 	Error  string `json:"error,omitempty"`
 }
 
-type ConnectPeerRequest struct {
-	Type    string `json:"type"`
-	Address string `json:"address"`
-}
-
-type DisconnectPeerRequest struct {
-	Type    string `json:"type"`
-	Address string `json:"address"`
-}
-
 type JoinNetworkRequest struct {
+	Type      string `json:"type"`
+	Address   string `json:"address"`             // Joining node's listening endpoint.
+	Bootstrap string `json:"bootstrap,omitempty"` // Set only by the local CLI command.
+}
+
+type AcceptJoinMessage struct {
 	Type    string `json:"type"`
 	Address string `json:"address"`
 }
 
-type ListPeersRequest struct {
-	Type string `json:"type"`
+type LeaveNetworkMessage struct {
+	Type    string `json:"type"`
+	Address string `json:"address"`
+}
+
+type PeerListMessage struct {
+	Type    string   `json:"type"`
+	Sender  string   `json:"sender,omitempty"`
+	Peers   []string `json:"peers,omitempty"`
+	Request bool     `json:"request,omitempty"`
 }

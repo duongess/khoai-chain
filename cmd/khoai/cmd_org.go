@@ -147,7 +147,7 @@ func installOrganization(packagePath string) error {
 	defer gr.Close()
 
 	tr := tar.NewReader(gr)
-
+	var extractedOrgDir string
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -160,6 +160,20 @@ func installOrganization(packagePath string) error {
 		target := filepath.Join(installDir, header.Name)
 		if !strings.HasPrefix(target, installDir) {
 			return fmt.Errorf("invalid path in package: %s", header.Name)
+		}
+
+		// Each package is rooted at its organization directory (for example,
+		// "vingroup/.version"). Keep that directory separately: `target` is
+		// the current extracted file and may end up being organization.yaml.
+		pathParts := strings.Split(filepath.Clean(header.Name), string(filepath.Separator))
+		if len(pathParts) == 0 || pathParts[0] == "." || pathParts[0] == "" {
+			return fmt.Errorf("invalid path in package: %s", header.Name)
+		}
+		orgDir := filepath.Join(installDir, pathParts[0])
+		if extractedOrgDir == "" {
+			extractedOrgDir = orgDir
+		} else if extractedOrgDir != orgDir {
+			return fmt.Errorf("invalid package: files must belong to one organization directory")
 		}
 
 		switch header.Typeflag {
@@ -184,9 +198,31 @@ func installOrganization(packagePath string) error {
 		}
 	}
 
-	// Logic tải mã nguồn sau khi giải nén...
-	// (Giữ nguyên logic từ file gốc)
+	if extractedOrgDir == "" {
+		return fmt.Errorf("installation failed: package is empty")
+	}
 
+	fmt.Printf("Successfully extracted organization to '%s'\n", extractedOrgDir)
+
+	// Read the .version file from the newly extracted workspace
+	versionFilePath := filepath.Join(extractedOrgDir, ".version")
+	versionData, err := os.ReadFile(versionFilePath)
+	if err != nil {
+		return fmt.Errorf("installation failed: package is missing required '.version' file: %w", err)
+	}
+	version := strings.TrimSpace(string(versionData))
+	if version == "" {
+		return fmt.Errorf("installation failed: '.version' file is empty or invalid")
+	}
+
+	// Download the exact source code version required by the package
+	fmt.Printf("Organization requires Khoai source version: %s. Downloading...\n", version)
+	_, err = downloadViaScript(version, extractedOrgDir)
+	if err != nil {
+		return fmt.Errorf("failed to download required source code version '%s': %w", version, err)
+	}
+
+	fmt.Printf("Successfully downloaded source code for version %s.\n", version)
 	fmt.Println("Installation complete.")
 	return nil
 }

@@ -24,58 +24,53 @@ var (
 )
 
 func main() {
-	// 1. Setup config file discovery (logic to find it next to the exe)
 	defaultConfigPath := filepath.Join("/app", "config.yaml")
 
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
 
-	// 2. Initialize CLI
 	nodeCLI := cli.NewCLI()
 
-	// --- COMMAND: RUN (The only command for the node) ---
-	nodeCLI.AddCommand("run", "Run the blockchain node", func(args []string) error {
-		// 1. Load Config
-		conf, err := config.LoadConfig(*configPathFlag)
-		if err != nil {
-			fmt.Printf("Could not read config file at: %s\n", *configPathFlag)
-			absPath, _ := filepath.Abs(*configPathFlag)
-			fmt.Printf("   (Absolute path: %s)\n", absPath)
-			os.Exit(1)
-		}
+	// 1. Load Config
+	conf, err := config.LoadConfig(*configPathFlag)
+	if err != nil {
+		fmt.Printf("Could not read config file at: %s\n", *configPathFlag)
+		absPath, _ := filepath.Abs(*configPathFlag)
+		fmt.Printf("   (Absolute path: %s)\n", absPath)
+		os.Exit(1)
+	}
 
-		fmt.Println("========================================")
-		fmt.Printf("KHOAI CHAIN NODE: %s\n", conf.NodeName)
-		fmt.Printf("Config File: %s\n", *configPathFlag)
-		fmt.Printf("Database Path: %s\n", conf.DBPath)
-		fmt.Println("========================================")
+	fmt.Println("========================================")
+	fmt.Printf("KHOAI CHAIN NODE: %s\n", conf.NodeName)
+	fmt.Printf("Config File: %s\n", *configPathFlag)
+	fmt.Printf("Database Path: %s\n", conf.DBPath)
+	fmt.Println("========================================")
 
-		// 2. Initialize DB
-		db := database.InitDB(conf.DBPath)
-		defer db.Close()
+	// 2. Initialize DB
+	db := database.InitDB(conf.DBPath)
+	defer db.Close()
 
-		// 3. Initialize Blockchain
-		chain := core.InitBlockchain(db)
+	// 3. Initialize Blockchain
+	chain := core.InitBlockchain(db)
 
-		// 4. Initialize Smart Contract Manager
-		contractManager := contract.NewManager(chain)
+	// 4. Initialize Smart Contract Manager
+	contractManager := contract.NewManager(chain)
 
-		// Register contracts
-		contractManager.RegisterApp(examples.NewUsageExamples())
-		{{range .Registrations}}
-		contractManager.RegisterApp({{.}})
-		{{end}}
+	// Register contracts
+	contractManager.RegisterApp(examples.NewUsageExamples())
+	{{range .Registrations}}
+	contractManager.RegisterApp({{.}})
+	{{end}}
 
-		fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
+	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
-		// 5. Initialize P2P Server
-		srv := p2p.NewServer(conf.Endpoint, contractManager)
-		go srv.Start()
+	// 5. Initialize P2P Server
+	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	go srv.Start()
 
-		// 6. Block main thread to keep the server running forever
-		select {}
-	})
+	// 6. Block main thread to keep the server running forever
+	select {}
 
 	nodeCLI.Run()
 }

@@ -271,51 +271,43 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
-	// B. Generate Dockerfile (Multi-stage build)
+	// B. Generate Dockerfile (Single-stage for 'go run')
 	dockerfileTmpl := `
-# --- Stage 1: Builder ---
-FROM {{.ImageBase}} AS builder
+# --- Single-Stage Build for Development/go run ---
+FROM {{.ImageBase}}
 WORKDIR /app
 
-# 1. Copy go.mod and go.sum to leverage Docker cache for dependencies
-COPY go.mod go.sum ./
+# Cai dat unzip de xu ly file nguon
+RUN apk add --no-cache unzip
+
+# Build context hien tai la thu muc "build/". Goi truc tiep den dist/
+COPY dist/khoai-src-v0.2.3.zip ./src.zip
+
+# Giai nen code vao /app va xoa zip de toi uu layer
+RUN unzip src.zip -d . && rm src.zip
+
+# Tai thu vien phu thuoc cho du an
 RUN go mod download
 
-# 2. Copy the rest of the source code
-COPY cmd ./cmd
-COPY internal ./internal
-COPY pkg ./pkg
-COPY examples ./examples
+# Goi truc tiep den organizations/ tu build context
+COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/main.go ./cmd/node/main.go
+COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/config.yaml ./config.yaml
+COPY organizations/{{.OrgName}}/contracts/ ./contracts/
 
-# 3. Copy the generated main.go, overwriting the placeholder from the previous step.
-#    This ensures the correct main file (with proper contract imports and config path) is used.
-COPY build/nodes/{{.NodeName}}/main.go ./cmd/node/main.go
-
-# 4. Build the application binary
-RUN go build -o /khoai-node ./cmd/node
-
-# --- Stage 2: Runner (Run the application) ---
-FROM alpine:3.19
-WORKDIR /app
-
-# 5. Install necessary system libraries (if any)
-RUN apk add --no-cache ca-certificates libc6-compat
-
-# 6. Copy the final binary from the builder stage and the config file
-COPY --from=builder /khoai-node .
-COPY build/nodes/{{.NodeName}}/config.yaml .
-
-# 7. Setup for running
+# Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
 EXPOSE {{.Port}}
 
-CMD ["./khoai-node", "run"]
+# Khoi chay node
+CMD ["go", "run", "./cmd/node/main.go"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeName":  uniqueNodeName, // This is still needed for the COPY path
+		"NodeName":  uniqueNodeName,
 		"Port":      port,
 		"ImageBase": cfg.Docker.ImageBase,
+		"OrgName":   sanitize(org.DisplayName),
+		"NodeID":    node.ID,
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -373,45 +365,40 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 
 	// B. Generate Dockerfile (Multi-stage build for WORKSPACE)
 	dockerfileTmpl := `
-# --- Stage 1: Builder ---
-FROM {{.ImageBase}} AS builder
+# --- Single-Stage Build for Development/go run ---
+FROM {{.ImageBase}}
 WORKDIR /app
 
-# 1. Copy go.mod and go.sum to leverage Docker cache for dependencies
-COPY go.mod go.sum ./
+# Cai dat unzip de xu ly file nguon
+RUN apk add --no-cache unzip
+
+# Build context hien tai la thu muc "build/". Goi truc tiep den dist/
+COPY dist/khoai-src-v0.2.3.zip ./src.zip
+
+# Giai nen code vao /app va xoa zip de toi uu layer
+RUN unzip src.zip -d . && rm src.zip
+
+# Tai thu vien phu thuoc cho du an
 RUN go mod download
 
-# 2. Copy the rest of the source code
-COPY cmd ./cmd
-COPY internal ./internal
-COPY pkg ./pkg
-COPY examples ./examples
+# Goi truc tiep den organizations/ tu build context
+COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/main.go ./cmd/node/main.go
+COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/config.yaml ./config.yaml
+COPY organizations/{{.OrgName}}/contracts/ ./contracts/
 
-# 3. Copy the generated main.go, overwriting the placeholder. Path is relative to build context (workspace root).
-COPY nodes/{{.NodeID}}/main.go ./cmd/node/main.go
-
-# 4. Build the application binary
-RUN go build -o /khoai-node ./cmd/node
-
-# --- Stage 2: Runner (Run the application) ---
-FROM alpine:3.19
-WORKDIR /app
-
-# 5. Copy the final binary from the builder stage and the config file
-COPY --from=builder /khoai-node .
-COPY nodes/{{.NodeID}}/config.yaml .
-
-# 6. Setup for running
+# Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
 EXPOSE {{.Port}}
 
-CMD ["./khoai-node", "run"]
+# Khoi chay node
+CMD ["go", "run", "./cmd/node/main.go"]
 `
 	// Template data
 	data := map[string]interface{}{
 		"NodeID":    node.ID, // Use NodeID for path
 		"Port":      port,
 		"ImageBase": cfg.Docker.ImageBase,
+		"OrgName":   sanitize(org.DisplayName),
 	}
 
 	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)
@@ -477,8 +464,8 @@ services:
 {{range .Nodes}}
   {{.Name}}:
     build:
-      context: ..  # Build context is the project root, relative to this compose file
-      dockerfile: ./build/organizations/{{.OrgName}}/nodes/{{.NodeID}}/Dockerfile # Path to the Dockerfile, relative to the context
+      context: .
+      dockerfile: ./organizations/{{.OrgName}}/nodes/{{.NodeID}}/Dockerfile
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:

@@ -13,21 +13,32 @@ func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager)
 	return handleMessage(payload, s, manager, nil)
 }
 
+// genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.
+type genericMessage struct {
+	Type string `json:"type"`
+}
+
 func handleMessage(payload []byte, s *Server, manager *contract.ContractManager, peer *Peer) ([]byte, error) {
 	fmt.Printf("Processing data: %s\n", string(payload))
 
-	var msg CommandMessage
+	var baseMsg genericMessage
 	// If JSON is malformed from the start -> Return JSON error to Client
-	if err := json.Unmarshal(payload, &msg); err != nil {
+	if err := json.Unmarshal(payload, &baseMsg); err != nil {
 		// Package JSON error here
 		resp := ResponseMessage{Status: "Error", Error: "Invalid JSON format"}
 		return json.Marshal(resp)
 	}
 
-	switch msg.Type {
+	switch baseMsg.Type {
 
 	// --- CASE 1: CLIENT SENDS COMMAND (RETURNS ResponseMessage) ---
 	case MsgExecute:
+		var msg CommandMessage
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
+		}
+
 		var argsBytes [][]byte
 		for _, arg := range msg.Args {
 			argsBytes = append(argsBytes, []byte(arg))

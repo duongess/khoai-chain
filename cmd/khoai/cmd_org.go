@@ -147,7 +147,7 @@ func installOrganization(packagePath string) error {
 	defer gr.Close()
 
 	tr := tar.NewReader(gr)
-	var targetDir string
+	var extractedOrgDir string
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -157,37 +157,55 @@ func installOrganization(packagePath string) error {
 			return err
 		}
 
-		targetDir = filepath.Join(installDir, header.Name)
-		if !strings.HasPrefix(targetDir, installDir) {
+		target := filepath.Join(installDir, header.Name)
+		if !strings.HasPrefix(target, installDir) {
 			return fmt.Errorf("invalid path in package: %s", header.Name)
+		}
+
+		// Each package is rooted at its organization directory (for example,
+		// "vingroup/.version"). Keep that directory separately: `target` is
+		// the current extracted file and may end up being organization.yaml.
+		pathParts := strings.Split(filepath.Clean(header.Name), string(filepath.Separator))
+		if len(pathParts) == 0 || pathParts[0] == "." || pathParts[0] == "" {
+			return fmt.Errorf("invalid path in package: %s", header.Name)
+		}
+		orgDir := filepath.Join(installDir, pathParts[0])
+		if extractedOrgDir == "" {
+			extractedOrgDir = orgDir
+		} else if extractedOrgDir != orgDir {
+			return fmt.Errorf("invalid package: files must belong to one organization directory")
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetDir, 0755); err != nil {
+			if err := os.MkdirAll(target, 0755); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetDir), 0755); err != nil {
-				return fmt.Errorf("failed to create parent directory for %s: %w", targetDir, err)
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directory for %s: %w", target, err)
 			}
 
-			f, err := os.OpenFile(targetDir, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
-				return fmt.Errorf("failed to create file %s: %w", targetDir, err)
+				return fmt.Errorf("failed to create file %s: %w", target, err)
 			}
 			if _, err := io.Copy(f, tr); err != nil {
 				f.Close()
-				return fmt.Errorf("failed to write content to file %s: %w", targetDir, err)
+				return fmt.Errorf("failed to write content to file %s: %w", target, err)
 			}
 			f.Close()
 		}
 	}
 
-	fmt.Printf("Successfully extracted organization to '%s'\n", targetDir)
+	if extractedOrgDir == "" {
+		return fmt.Errorf("installation failed: package is empty")
+	}
+
+	fmt.Printf("Successfully extracted organization to '%s'\n", extractedOrgDir)
 
 	// Read the .version file from the newly extracted workspace
-	versionFilePath := filepath.Join(targetDir, ".version")
+	versionFilePath := filepath.Join(extractedOrgDir, ".version")
 	versionData, err := os.ReadFile(versionFilePath)
 	if err != nil {
 		return fmt.Errorf("installation failed: package is missing required '.version' file: %w", err)
@@ -199,7 +217,7 @@ func installOrganization(packagePath string) error {
 
 	// Download the exact source code version required by the package
 	fmt.Printf("Organization requires Khoai source version: %s. Downloading...\n", version)
-	_, err = downloadViaScript(version, targetDir)
+	_, err = downloadViaScript(version, extractedOrgDir)
 	if err != nil {
 		return fmt.Errorf("failed to download required source code version '%s': %w", version, err)
 	}

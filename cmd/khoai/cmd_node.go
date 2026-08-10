@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"khoai-chain/internal/config"
+	"khoai-chain/internal/p2p"
 	"khoai-chain/pkg/cli"
 	"os"
 	"path/filepath"
@@ -113,43 +115,47 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return runCommand("docker", "compose", "-f", composeFile, "logs", "-f", "--tail", "100", nodeToLog)
 	})
 
-	// Lệnh 'connect' để kết nối tới một peer.
-	app.AddCommand("connect", "Connect to peer", func(args []string) error {
+	app.AddCommand("join", "Join a network through an existing peer", func(args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai connect <localhost:8000> <localhost:9000>")
+			return fmt.Errorf("invalid command. Node and bootstrap addresses are required. Example: khoai join <localhost:8000> <localhost:9000>")
 		}
 		address := args[0]
 		peerAddress := args[1]
-		sendToNode(address, fmt.Sprintf("{\"type\":\"CONNECT_PEER\", \"address\":\"%s\"}", peerAddress))
-		return nil
-	})
-
-	app.AddCommand("disconnect", "Disconnect from peer", func(args []string) error {
-		if len(args) < 2 {
-			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai disconnect <localhost:8000> <localhost:9000>")
+		message, err := json.Marshal(p2p.JoinNetworkRequest{
+			Type:      p2p.MsgJoinNetwork,
+			Address:   address,
+			Bootstrap: peerAddress,
+		})
+		if err != nil {
+			return err
 		}
-		address := args[0]
-		peerAddress := args[1]
-		sendToNode(address, fmt.Sprintf("{\"type\":\"DISCONNECT_PEER\", \"address\":\"%s\"}", peerAddress))
+		sendToNode(address, string(message))
 		return nil
 	})
 
-	app.AddCommand("join", "See list peer connected", func(args []string) error {
-		if len(args) < 2 {
-			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai disconnect <localhost:8000> <localhost:9000>")
-		}
-		address := args[0]
-		peerAddress := args[1]
-		sendToNode(address, fmt.Sprintf("{\"type\":\"JOIN_NETWORK\", \"address\":\"%s\"}", peerAddress))
-		return nil
-	})
-
-	app.AddCommand("list", "", func(args []string) error {
+	app.AddCommand("leave", "Leave the current P2P network", func(args []string) error {
 		if len(args) < 1 {
-			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai list <localhost:8000>")
+			return fmt.Errorf("invalid command. Node address is required. Example: khoai leave <localhost:8000>")
 		}
 		address := args[0]
-		sendToNode(address, "{\"type\":\"LIST_PEERS\"}")
+		message, err := json.Marshal(p2p.LeaveNetworkMessage{Type: p2p.MsgLeaveNetwork, Address: address})
+		if err != nil {
+			return err
+		}
+		sendToNode(address, string(message))
+		return nil
+	})
+
+	app.AddCommand("peers", "List peers known by a node", func(args []string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("invalid command. Node address is required. Example: khoai peers <localhost:8000>")
+		}
+		address := args[0]
+		message, err := json.Marshal(p2p.PeerListMessage{Type: p2p.MsgPeerList, Request: true})
+		if err != nil {
+			return err
+		}
+		sendToNode(address, string(message))
 		return nil
 	})
 }

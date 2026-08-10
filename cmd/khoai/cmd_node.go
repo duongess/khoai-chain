@@ -12,19 +12,26 @@ import (
 func registerNodeCommands(app *cli.CLI, configPath string) {
 	// Lệnh 'start' để build và khởi động node(s) bằng Docker Compose.
 	app.AddCommand("start", "Build and start node(s) using Docker Compose", func(args []string) error {
-		if len(args) == 0 {
-			return fmt.Errorf("invalid command. A node name or 'all' is required. Example: khoai start node_vingroup | khoai start all")
-		}
-		nodeToStart := args[0]
-
 		isWorkspace, err := isWorkspaceContext()
 		if err != nil {
 			return err
 		}
 
+		nodeToStart := ""
+		if len(args) > 0 {
+			nodeToStart = args[0]
+		}
+		if !isWorkspace && nodeToStart == "" {
+			return fmt.Errorf("invalid command. A node name or 'all' is required. Example: khoai start node_vingroup | khoai start all")
+		}
+
 		var composeFile string
 		if isWorkspace {
 			fmt.Println("Running in Organization Workspace context.")
+			fmt.Println("Preparing node artifacts for this organization...")
+			if _, err := generateWorkspaceNodeArtifacts(true); err != nil {
+				return err
+			}
 			composeFile = "docker-compose.yaml"
 			if err := generateWorkspaceCompose(composeFile); err != nil {
 				return fmt.Errorf("could not generate workspace docker-compose: %w", err)
@@ -35,6 +42,15 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 				return fmt.Errorf("could not generate configuration files: %w", err)
 			}
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")
+		}
+
+		if isWorkspace {
+			if nodeToStart == "all" {
+				fmt.Println("\nStarting all nodes...")
+			} else {
+				fmt.Println("\nStarting all nodes in this organization...")
+			}
+			return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d")
 		}
 
 		if nodeToStart == "all" {

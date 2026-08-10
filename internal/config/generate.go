@@ -372,7 +372,7 @@ WORKDIR /app
 # Cai dat unzip de xu ly file nguon
 RUN apk add --no-cache unzip
 
-# Build context hien tai la thu muc "build/". Goi truc tiep den dist/
+# Build context hien tai la thu muc workspace. Goi truc tiep den dist/
 COPY dist/khoai-src-v0.2.3.zip ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
@@ -381,10 +381,10 @@ RUN unzip src.zip -d . && rm src.zip
 # Tai thu vien phu thuoc cho du an
 RUN go mod download
 
-# Goi truc tiep den organizations/ tu build context
-COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/main.go ./cmd/node/main.go
-COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/config.yaml ./config.yaml
-COPY organizations/{{.OrgName}}/contracts/ ./contracts/
+# Goi truc tiep den node cua organization workspace hien tai
+COPY nodes/{{.NodeID}}/main.go ./cmd/node/main.go
+COPY nodes/{{.NodeID}}/config.yaml ./config.yaml
+COPY contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
@@ -398,7 +398,6 @@ CMD ["go", "run", "./cmd/node/main.go"]
 		"NodeID":    node.ID, // Use NodeID for path
 		"Port":      port,
 		"ImageBase": cfg.Docker.ImageBase,
-		"OrgName":   sanitize(org.DisplayName),
 	}
 
 	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)

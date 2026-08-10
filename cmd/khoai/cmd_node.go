@@ -107,4 +107,33 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		sendToNode(address, fmt.Sprintf("{\"type\":\"CONNECT_PEER\", \"address\":\"%s\"}", peerAddress))
 		return nil
 	})
+
+	app.AddCommand("disconnect", "Disconnect from peer", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai disconnect <localhost:8000> <localhost:9000>")
+		}
+		address := args[0]
+		peerAddress := args[1]
+		sendToNode(address, fmt.Sprintf("{\"type\":\"DISCONNECT_PEER\", \"address\":\"%s\"}", peerAddress))
+		return nil
+	})
+
+	app.AddCommand("join", "See list peer connected", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai disconnect <localhost:8000> <localhost:9000>")
+		}
+		address := args[0]
+		peerAddress := args[1]
+		sendToNode(address, fmt.Sprintf("{\"type\":\"JOIN_NETWORK\", \"address\":\"%s\"}", peerAddress))
+		return nil
+	})
+
+	app.AddCommand("list", "", func(args []string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("invalid command. Both server and peer addresses are required. Example: khoai list <localhost:8000>")
+		}
+		address := args[0]
+		sendToNode(address, "{\"type\":\"LIST_PEERS\"}")
+		return nil
+	})
 }

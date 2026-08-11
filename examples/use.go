@@ -65,7 +65,8 @@ func (ue *UsageExamples) TestGet(args [][]byte) ([]byte, error) {
 	for i, item := range t.D {
 		fmt.Printf("   - Item %d: %s\n", i, string(item))
 	}
-	fmt.Println("---------------------------------\n")
+	fmt.Println("---------------------------------")
+	fmt.Println()
 
 	return t.A, nil
 }

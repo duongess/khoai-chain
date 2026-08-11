@@ -113,9 +113,9 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return runCommand("docker", "compose", "-f", composeFile, "logs", "-f", "--tail", "100", nodeToLog)
 	})
 
-	app.AddCommand("join", "Join a network through an existing peer", func(args []string) error {
+	app.AddCommand("join", "Submit an HTTP join request through a P2P bootstrap node", func(args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("invalid command. Node and bootstrap addresses are required. Example: khoai join <localhost:8000> <localhost:9000>")
+			return fmt.Errorf("invalid command. HTTP node address and bootstrap P2P hostname are required. Example: khoai join localhost:18081 vingroup-hcm:9000")
 		}
 		address := args[0]
 		peerAddress := args[1]
@@ -124,7 +124,7 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return peerAPI(address, "POST", "/join", map[string]string{"endpoint": address, "bootstrap": peerAddress, "api_endpoint": peerAPIAddress(address)})
 	})
 
-	app.AddCommand("leave", "Leave the current P2P network", func(args []string) error {
+	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("invalid command. Node address is required. Example: khoai leave <localhost:8000>")
 		}
@@ -133,14 +133,21 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return peerAPI(address, "POST", "/leave", nil)
 	})
 
-	app.AddCommand("approve", "Approve a pending network join request", func(args []string) error {
+	app.AddCommand("approve", "Approve a pending HTTP join request", func(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("invalid command. Node address and request ID are required. Example: khoai approve <localhost:9000> <request-id>")
 		}
 		return peerAPI(normalizeNodeAddress(args[0]), "POST", "/join-requests/"+args[1]+"/approve", nil)
 	})
 
-	app.AddCommand("peers", "List peers known by a node", func(args []string) error {
+	app.AddCommand("remove-peer", "Remove a peer through the HTTP control API", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. HTTP node address and P2P peer endpoint are required. Example: khoai remove-peer localhost:18081 vingroup-hcm:9000")
+		}
+		return peerAPI(normalizeNodeAddress(args[0]), "POST", "/peers/remove", map[string]string{"endpoint": args[1]})
+	})
+
+	app.AddCommand("peers", "List peers through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("invalid command. Node address is required. Example: khoai peers <localhost:8000>")
 		}

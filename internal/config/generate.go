@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -84,14 +83,6 @@ type RuntimeNodeConfig struct {
 	ID          string `yaml:"id"`
 	DisplayName string `yaml:"display_name"`
 	Endpoint    string `yaml:"endpoint"`
-}
-
-func mustNextPort(port string) int {
-	n, err := strconv.Atoi(port)
-	if err != nil || n >= 65535 {
-		return 0
-	}
-	return n + 1
 }
 
 // ChaincodeConfig defines a smart contract.
@@ -246,20 +237,21 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
 
 	// This struct defines the content of the generated runtime config.yaml.
 	// It includes new fields for organization/node info while retaining
 	// old fields for compatibility with the existing runtime.
 	type RuntimeConfigContent struct {
-		NodeName        string            `yaml:"node_name"`
-		DBPath          string            `yaml:"db_path"`
-		Chaincodes      []ChaincodeConfig `yaml:"chaincodes"`
-		Organization    string            `yaml:"organization"`
-		NodeID          string            `yaml:"node_id"`
-		DisplayName     string            `yaml:"display_name"`
-		Endpoint        string            `yaml:"endpoint"`
-		PeerAPIEndpoint string            `yaml:"peer_api_endpoint"`
+		NodeName           string            `yaml:"node_name"`
+		DBPath             string            `yaml:"db_path"`
+		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
+		Organization       string            `yaml:"organization"`
+		NodeID             string            `yaml:"node_id"`
+		DisplayName        string            `yaml:"display_name"`
+		HTTPListenEndpoint string            `yaml:"http_listen"`
+		HTTPEndpoint       string            `yaml:"http_endpoint"`
+		P2PListenEndpoint  string            `yaml:"p2p_listen"`
+		P2PEndpoint        string            `yaml:"p2p_endpoint"`
 	}
 
 	finalConfig := RuntimeConfigContent{
@@ -270,9 +262,10 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
-	finalConfig.Endpoint = listenEndpoint
-	apiPort, _ := strconv.Atoi(port)
-	finalConfig.PeerAPIEndpoint = fmt.Sprintf("0.0.0.0:%d", apiPort+1)
+	finalConfig.HTTPListenEndpoint = "0.0.0.0:8080"
+	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:8080", uniqueNodeName)
+	finalConfig.P2PListenEndpoint = "0.0.0.0:9000"
+	finalConfig.P2PEndpoint = fmt.Sprintf("%s:9000", uniqueNodeName)
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -313,7 +306,7 @@ COPY organizations/{{.OrgName}}/contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.Port}}
+EXPOSE 8080 9000
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
@@ -351,28 +344,31 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
 
 	type RuntimeConfigContent struct {
-		NodeName        string            `yaml:"node_name"`
-		DBPath          string            `yaml:"db_path"`
-		Chaincodes      []ChaincodeConfig `yaml:"chaincodes"`
-		Organization    string            `yaml:"organization"`
-		NodeID          string            `yaml:"node_id"`
-		DisplayName     string            `yaml:"display_name"`
-		Endpoint        string            `yaml:"endpoint"`
-		PeerAPIEndpoint string            `yaml:"peer_api_endpoint"`
+		NodeName           string            `yaml:"node_name"`
+		DBPath             string            `yaml:"db_path"`
+		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
+		Organization       string            `yaml:"organization"`
+		NodeID             string            `yaml:"node_id"`
+		DisplayName        string            `yaml:"display_name"`
+		HTTPListenEndpoint string            `yaml:"http_listen"`
+		HTTPEndpoint       string            `yaml:"http_endpoint"`
+		P2PListenEndpoint  string            `yaml:"p2p_listen"`
+		P2PEndpoint        string            `yaml:"p2p_endpoint"`
 	}
 
 	finalConfig := RuntimeConfigContent{
-		NodeName:        uniqueNodeName,
-		DBPath:          "/app/data",
-		Chaincodes:      org.Chaincodes,
-		Organization:    org.DisplayName,
-		NodeID:          node.ID,
-		DisplayName:     node.DisplayName,
-		Endpoint:        listenEndpoint,
-		PeerAPIEndpoint: fmt.Sprintf("0.0.0.0:%d", mustNextPort(port)),
+		NodeName:           uniqueNodeName,
+		DBPath:             "/app/data",
+		Chaincodes:         org.Chaincodes,
+		Organization:       org.DisplayName,
+		NodeID:             node.ID,
+		DisplayName:        node.DisplayName,
+		HTTPListenEndpoint: "0.0.0.0:8080",
+		HTTPEndpoint:       fmt.Sprintf("%s:8080", uniqueNodeName),
+		P2PListenEndpoint:  "0.0.0.0:9000",
+		P2PEndpoint:        fmt.Sprintf("%s:9000", uniqueNodeName),
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -414,7 +410,7 @@ COPY contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.Port}}
+EXPOSE 8080 9000
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
@@ -458,11 +454,10 @@ func sourceArchiveFromVersionFile(versionFile string) (string, error) {
 func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	// We need to create a flat list of nodes for the template.
 	type ComposeNodeInfo struct {
-		Name    string // unique name: vingroup-hn
-		OrgName string // sanitized org name: vingroup
-		NodeID  string // node id: hn
-		Port    string
-		APIPort int
+		Name         string // unique name: vingroup-hn
+		OrgName      string // sanitized org name: vingroup
+		NodeID       string // node id: hn
+		HostHTTPPort string
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -474,11 +469,10 @@ func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 				return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 			}
 			allNodes = append(allNodes, ComposeNodeInfo{
-				Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-				OrgName: sanitizedOrgName,
-				NodeID:  node.ID,
-				Port:    port,
-				APIPort: mustNextPort(port),
+				Name:         fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+				OrgName:      sanitizedOrgName,
+				NodeID:       node.ID,
+				HostHTTPPort: port,
 			})
 		}
 	}
@@ -513,8 +507,9 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.Port}}:{{.Port}}"
-      - "{{.APIPort}}:{{.APIPort}}"
+      - "{{.HostHTTPPort}}:8080"
+    expose:
+      - "9000"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
@@ -535,10 +530,9 @@ services:
 // GenerateWorkspaceDockerCompose creates a docker-compose.yaml file for a single organization workspace.
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
-		Name    string // unique name: vingroup-hn
-		NodeID  string // node id: hn
-		Port    string
-		APIPort int
+		Name         string // unique name: vingroup-hn
+		NodeID       string // node id: hn
+		HostHTTPPort string
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -551,26 +545,31 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 		}
 		allNodes = append(allNodes, ComposeNodeInfo{
-			Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-			NodeID:  node.ID,
-			Port:    port,
-			APIPort: mustNextPort(port),
+			Name:         fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			NodeID:       node.ID,
+			HostHTTPPort: port,
 		})
 	}
 
 	type ComposeTemplateData struct {
-		Registry string
-		ImageTag string
-		Nodes    []ComposeNodeInfo
+		NetworkName string
+		Registry    string
+		ImageTag    string
+		Nodes       []ComposeNodeInfo
 	}
 
 	templateData := ComposeTemplateData{
-		Registry: cfg.Docker.Registry,
-		ImageTag: cfg.Docker.ImageTag,
-		Nodes:    allNodes,
+		NetworkName: "khoai-network",
+		Registry:    cfg.Docker.Registry,
+		ImageTag:    cfg.Docker.ImageTag,
+		Nodes:       allNodes,
 	}
 
 	composeTmpl := `version: "3.9"
+
+networks:
+  {{.NetworkName}}:
+    driver: bridge
 
 services:
 {{range .Nodes}}
@@ -581,11 +580,14 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.Port}}:{{.Port}}"
-      - "{{.APIPort}}:{{.APIPort}}"
+      - "{{.HostHTTPPort}}:8080"
+    expose:
+      - "9000"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config
+    networks:
+      - {{$.NetworkName}}
     restart: always
 {{end}}
 `

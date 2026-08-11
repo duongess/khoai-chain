@@ -13,9 +13,7 @@ import (
 )
 
 type joinSubmission struct {
-	Endpoint    string `json:"endpoint"`
-	Bootstrap   string `json:"bootstrap"`
-	APIEndpoint string `json:"api_endpoint"`
+	Bootstrap string `json:"bootstrap"`
 }
 
 type acceptSubmission struct {
@@ -32,6 +30,7 @@ func (s *Server) StartPeerAPI() {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/peers", s.handlePeers)
+	mux.HandleFunc("/peers/remove", s.handleRemovePeer)
 	mux.HandleFunc("/join", s.handleJoin)
 	mux.HandleFunc("/join-requests", s.handleJoinRequests)
 	mux.HandleFunc("/join-requests/", s.handleJoinRequestAction)
@@ -51,14 +50,30 @@ func (s *Server) handlePeers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"peers": s.GetPeerList()})
 }
 
+func (s *Server) handleRemovePeer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Endpoint == "" {
+		http.Error(w, "endpoint is required", http.StatusBadRequest)
+		return
+	}
+	s.RemovePeerByEndpoint(body.Endpoint)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	var body joinSubmission
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Endpoint == "" || body.Bootstrap == "" || body.APIEndpoint == "" {
-		http.Error(w, "endpoint, bootstrap and api_endpoint are required", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Bootstrap == "" {
+		http.Error(w, "bootstrap is required", http.StatusBadRequest)
 		return
 	}
 	id, err := requestID()
@@ -66,9 +81,11 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	req := &JoinRequest{RequestID: id, NodeID: s.NodeID, Endpoint: body.Endpoint, APIEndpoint: body.APIEndpoint, ExpiresAt: time.Now().Add(joinRequestTTL), outbound: true}
+	req := &JoinRequest{RequestID: id, NodeID: s.NodeID, Endpoint: s.Endpoint, APIEndpoint: s.HTTPEndpoint, ExpiresAt: time.Now().Add(joinRequestTTL), outbound: true}
 	s.addPendingRequest(req)
-	if err := postJSON(peerAPIFor(body.Bootstrap), "/join-requests", req, nil); err != nil {
+	// Bootstrap is a P2P address (for example vingroup-hcm:9000). The
+	// membership request itself travels over that node's HTTP control plane.
+	if err := postJSON(controlAPIFor(body.Bootstrap), "/join-requests", req, nil); err != nil {
 		s.deletePending(id)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -125,7 +142,7 @@ func (s *Server) handleLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, peer := range s.GetPeerList() {
-		_ = postJSON(peerAPIFor(peer), "/leave-notice", map[string]string{"endpoint": s.Endpoint}, nil)
+		_ = postJSON(controlAPIFor(peer), "/leave-notice", map[string]string{"endpoint": s.Endpoint}, nil)
 		s.RemovePeerByEndpoint(peer)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
@@ -185,24 +202,26 @@ func (s *Server) deletePending(id string) {
 }
 func (s *Server) peerAPIEndpoint() (string, error) {
 	s.lock.RLock()
-	configured := s.PeerAPIEndpoint
+	configured := s.HTTPEndpoint
 	endpoint := s.Endpoint
 	s.lock.RUnlock()
+	if s.HTTPListenEndpoint != "" {
+		return s.HTTPListenEndpoint, nil
+	}
 	if configured != "" {
 		return configured, nil
 	}
-	return peerAPIFor(endpoint), nil
+	return controlAPIFor(endpoint), nil
 }
-func peerAPIFor(endpoint string) string {
+func controlAPIFor(endpoint string) string {
 	host, port, err := net.SplitHostPort(endpoint)
 	if err != nil {
 		return endpoint
 	}
-	n, err := strconv.Atoi(port)
-	if err != nil {
+	if _, err := strconv.Atoi(port); err != nil {
 		return endpoint
 	}
-	return net.JoinHostPort(host, strconv.Itoa(n+1))
+	return net.JoinHostPort(host, "8080")
 }
 func requestID() (string, error) {
 	b := make([]byte, 16)

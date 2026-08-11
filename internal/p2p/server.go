@@ -17,22 +17,24 @@ const joinRequestTTL = 5 * time.Minute
 type JoinRequest struct {
 	RequestID   string
 	NodeID      string
-	Endpoint    string
-	APIEndpoint string
+	Endpoint    string // P2P endpoint advertised to other nodes.
+	APIEndpoint string // HTTP endpoint advertised inside Docker.
 	ExpiresAt   time.Time
 	outbound    bool
 }
 
 type Server struct {
-	Endpoint        string
-	NodeID          string
-	PeerAPIEndpoint string
-	Peers           map[string]*Peer
-	PendingRequests map[string]*JoinRequest
-	lock            sync.RWMutex
-	Contracts       *contract.ContractManager
-	config          *config.ConfigContent
-	configPath      string
+	Endpoint           string
+	P2PListenEndpoint  string
+	HTTPListenEndpoint string
+	HTTPEndpoint       string
+	NodeID             string
+	Peers              map[string]*Peer
+	PendingRequests    map[string]*JoinRequest
+	lock               sync.RWMutex
+	Contracts          *contract.ContractManager
+	config             *config.ConfigContent
+	configPath         string
 }
 
 func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
@@ -53,18 +55,33 @@ func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath str
 	s.configPath = configPath
 	if conf != nil {
 		s.NodeID = conf.NodeID
-		s.PeerAPIEndpoint = conf.PeerAPIEndpoint
+		if conf.P2PEndpoint != "" {
+			s.Endpoint = conf.P2PEndpoint
+		}
+		if conf.P2PListenEndpoint != "" {
+			s.P2PListenEndpoint = conf.P2PListenEndpoint
+		}
+		if conf.HTTPListenEndpoint != "" {
+			s.HTTPListenEndpoint = conf.HTTPListenEndpoint
+		}
+		if conf.HTTPEndpoint != "" {
+			s.HTTPEndpoint = conf.HTTPEndpoint
+		}
 	}
 	s.lock.Unlock()
 }
 
 func (s *Server) Start() {
-	listener, err := net.Listen("tcp", s.Endpoint)
+	listenEndpoint := s.P2PListenEndpoint
+	if listenEndpoint == "" {
+		listenEndpoint = s.Endpoint
+	}
+	listener, err := net.Listen("tcp", listenEndpoint)
 	if err != nil {
-		panic(fmt.Sprintf("Could not open port %s: %v", s.Endpoint, err))
+		panic(fmt.Sprintf("Could not open port %s: %v", listenEndpoint, err))
 	}
 
-	fmt.Printf("Server running on port %s. Waiting for connections...\n", s.Endpoint)
+	fmt.Printf("P2P data plane listening on %s (advertised as %s)\n", listenEndpoint, s.Endpoint)
 	go s.StartPeerAPI()
 	go s.connectPersistedPeers()
 

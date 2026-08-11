@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"io"
 	"khoai-chain/internal/config"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -83,17 +81,7 @@ func sanitize(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 }
 
-func peerAPIAddress(p2pAddress string) string {
-	host, port, err := net.SplitHostPort(p2pAddress)
-	if err != nil {
-		return p2pAddress
-	}
-	n, err := strconv.Atoi(port)
-	if err != nil {
-		return p2pAddress
-	}
-	return net.JoinHostPort(host, strconv.Itoa(n+1))
-}
+func peerAPIAddress(address string) string { return address }
 func peerAPI(address, method, path string, body any) error {
 	var reader io.Reader
 	if body != nil {

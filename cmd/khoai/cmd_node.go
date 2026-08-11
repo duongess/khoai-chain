@@ -52,16 +52,16 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 			} else {
 				fmt.Println("\nStarting all nodes in this organization...")
 			}
-			return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d")
+			return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d", "--remove-orphans")
 		}
 
 		if nodeToStart == "all" {
 			fmt.Println("\nStarting all nodes...")
-			return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d")
+			return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d", "--remove-orphans")
 		}
 
 		fmt.Printf("\nStarting node: %s...\n", nodeToStart)
-		return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d", nodeToStart)
+		return runCommand("docker", "compose", "-f", composeFile, "up", "--build", "-d", "--remove-orphans", nodeToStart)
 	})
 
 	// Lệnh 'stop' để dừng và xóa container của node(s).

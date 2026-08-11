@@ -225,6 +225,11 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 
 // GenerateNodeArtifacts creates the config.yaml, Dockerfile, and main.go for a single node.
 func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
+	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(BuildDir, ".version"))
+	if err != nil {
+		return err
+	}
+
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
@@ -281,7 +286,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc "build/". Goi truc tiep den dist/
-COPY dist/khoai-src-v0.2.3.zip ./src.zip
+COPY dist/{{.SourceArchive}} ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -303,11 +308,12 @@ CMD ["go", "run", "./cmd/node/main.go"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeName":  uniqueNodeName,
-		"Port":      port,
-		"ImageBase": cfg.Docker.ImageBase,
-		"OrgName":   sanitize(org.DisplayName),
-		"NodeID":    node.ID,
+		"NodeName":      uniqueNodeName,
+		"Port":          port,
+		"ImageBase":     cfg.Docker.ImageBase,
+		"OrgName":       sanitize(org.DisplayName),
+		"NodeID":        node.ID,
+		"SourceArchive": sourceArchive,
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -322,6 +328,12 @@ CMD ["go", "run", "./cmd/node/main.go"]
 // GenerateWorkspaceNodeArtifacts creates artifacts for a node within a workspace context.
 // The key difference is the Dockerfile paths, which are relative to the workspace root.
 func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
+	workspaceDir := filepath.Dir(filepath.Dir(nodeDir))
+	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(workspaceDir, ".version"))
+	if err != nil {
+		return err
+	}
+
 	// A. Generate config.yaml for this node (to be included in the Image)
 	_, port, err := net.SplitHostPort(node.Endpoint)
 	if err != nil {
@@ -373,7 +385,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc workspace. Goi truc tiep den dist/
-COPY dist/khoai-src-v0.2.3.zip ./src.zip
+COPY dist/{{.SourceArchive}} ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -395,9 +407,10 @@ CMD ["go", "run", "./cmd/node/main.go"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeID":    node.ID, // Use NodeID for path
-		"Port":      port,
-		"ImageBase": cfg.Docker.ImageBase,
+		"NodeID":        node.ID, // Use NodeID for path
+		"Port":          port,
+		"ImageBase":     cfg.Docker.ImageBase,
+		"SourceArchive": sourceArchive,
 	}
 
 	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)
@@ -407,6 +420,22 @@ CMD ["go", "run", "./cmd/node/main.go"]
 	}
 	defer f.Close()
 	return t.Execute(f, data)
+}
+
+// sourceArchiveFromVersionFile returns the source archive name produced by
+// install.sh for the version pinned in a .version file.
+func sourceArchiveFromVersionFile(versionFile string) (string, error) {
+	versionData, err := os.ReadFile(versionFile)
+	if err != nil {
+		return "", fmt.Errorf("could not read source version from %q: %w", versionFile, err)
+	}
+
+	version := strings.TrimSpace(string(versionData))
+	if version == "" || filepath.Base(version) != version {
+		return "", fmt.Errorf("invalid source version in %q", versionFile)
+	}
+
+	return fmt.Sprintf("khoai-src-%s.zip", version), nil
 }
 
 // --- LOGIC TO GENERATE DOCKER-COMPOSE ---
@@ -579,58 +608,53 @@ var (
 )
 
 func main() {
-	// 1. Setup config file discovery (logic to find it next to the exe)
 	defaultConfigPath := filepath.Join("/app", "config.yaml")
 
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
 
-	// 2. Initialize CLI
 	nodeCLI := cli.NewCLI()
 
-	// --- COMMAND: RUN (The only command for the node) ---
-	nodeCLI.AddCommand("run", "Run the blockchain node", func(args []string) error {
-		// 1. Load Config
-		conf, err := config.LoadConfig(*configPathFlag)
-		if err != nil {
-			fmt.Printf("Could not read config file at: %s\n", *configPathFlag)
-			absPath, _ := filepath.Abs(*configPathFlag)
-			fmt.Printf("   (Absolute path: %s)\n", absPath)
-			os.Exit(1)
-		}
+	// 1. Load Config
+	conf, err := config.LoadConfig(*configPathFlag)
+	if err != nil {
+		fmt.Printf("Could not read config file at: %s\n", *configPathFlag)
+		absPath, _ := filepath.Abs(*configPathFlag)
+		fmt.Printf("   (Absolute path: %s)\n", absPath)
+		os.Exit(1)
+	}
 
-		fmt.Println("========================================")
-		fmt.Printf("KHOAI CHAIN NODE: %s\n", conf.NodeName)
-		fmt.Printf("Config File: %s\n", *configPathFlag)
-		fmt.Printf("Database Path: %s\n", conf.DBPath)
-		fmt.Println("========================================")
+	fmt.Println("========================================")
+	fmt.Printf("KHOAI CHAIN NODE: %s\n", conf.NodeName)
+	fmt.Printf("Config File: %s\n", *configPathFlag)
+	fmt.Printf("Database Path: %s\n", conf.DBPath)
+	fmt.Println("========================================")
 
-		// 2. Initialize DB
-		db := database.InitDB(conf.DBPath)
-		defer db.Close()
+	// 2. Initialize DB
+	db := database.InitDB(conf.DBPath)
+	defer db.Close()
 
-		// 3. Initialize Blockchain
-		chain := core.InitBlockchain(db)
+	// 3. Initialize Blockchain
+	chain := core.InitBlockchain(db)
 
-		// 4. Initialize Smart Contract Manager
-		contractManager := contract.NewManager(chain)
+	// 4. Initialize Smart Contract Manager
+	contractManager := contract.NewManager(chain)
 
-		// Register contracts
-		contractManager.RegisterApp(examples.NewUsageExamples())
-		{{range .Registrations}}
-		contractManager.RegisterApp({{.}})
-		{{end}}
+	// Register contracts
+	contractManager.RegisterApp(examples.NewUsageExamples())
+	{{range .Registrations}}
+	contractManager.RegisterApp({{.}})
+	{{end}}
 
-		fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
+	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
-		// 5. Initialize P2P Server
-		srv := p2p.NewServer(conf.Endpoint, contractManager)
-		go srv.Start()
+	// 5. Initialize P2P Server
+	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	go srv.Start()
 
-		// 6. Block main thread to keep the server running forever
-		select {}
-	})
+	// 6. Block main thread to keep the server running forever
+	select {}
 
 	nodeCLI.Run()
 }

@@ -39,6 +39,8 @@ func (p *Peer) ReadLoop(s *Server) {
 	defer func() {
 		if p.registered {
 			s.RemovePeer(p)
+		} else {
+			s.RemovePendingPeer(p)
 		}
 		p.Conn.Close()
 	}()

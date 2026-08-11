@@ -112,6 +112,7 @@ func startNode(configPath string, isDevMode bool) {
 
 	// 6. Initialize P2P Server
 	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	srv.ConfigurePersistence(conf, configPath)
 	go srv.Start()
 
 	// 8. Block main thread to keep the server running forever

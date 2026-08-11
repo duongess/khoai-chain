@@ -44,13 +44,17 @@ type ResponseMessage struct {
 
 type JoinNetworkRequest struct {
 	Type      string `json:"type"`
+	RequestID string `json:"request_id,omitempty"`
+	NodeID    string `json:"node_id,omitempty"`
 	Address   string `json:"address"`             // Joining node's listening endpoint.
 	Bootstrap string `json:"bootstrap,omitempty"` // Set only by the local CLI command.
 }
 
 type AcceptJoinMessage struct {
-	Type    string `json:"type"`
-	Address string `json:"address"`
+	Type      string `json:"type"`
+	RequestID string `json:"request_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Address   string `json:"address"`
 }
 
 type LeaveNetworkMessage struct {

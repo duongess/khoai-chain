@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core" // Import để dùng struct Block nếu cần
+	"time"
 )
 
 // This function returns ([]byte, error).
@@ -17,6 +18,8 @@ func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager)
 type genericMessage struct {
 	Type string `json:"type"`
 }
+
+const legacyMsgListPeers = "LIST_PEERS"
 
 func handleMessage(payload []byte, s *Server, manager *contract.ContractManager, peer *Peer) ([]byte, error) {
 	fmt.Printf("Processing data: %s\n", string(payload))
@@ -114,7 +117,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		// CLI asks its local node to begin a JOIN. The node subsequently sends a
 		// normal JOIN_NETWORK request directly to the bootstrap peer.
 		if req.Bootstrap != "" {
-			if req.Address != s.Endpoint {
+			if !s.IsLocalEndpoint(req.Address) {
 				resp := ResponseMessage{Status: "Error", Error: "JOIN_NETWORK control request must target the local node"}
 				return json.Marshal(resp)
 			}
@@ -126,21 +129,37 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp := ResponseMessage{Status: "Error", Error: "Invalid joining node address"}
 			return json.Marshal(resp)
 		}
+		if req.RequestID == "" {
+			resp := ResponseMessage{Status: "Error", Error: "JOIN_NETWORK requires request_id"}
+			return json.Marshal(resp)
+		}
 		if peer == nil {
 			resp := ResponseMessage{Status: "Error", Error: "JOIN_NETWORK requires a peer connection"}
 			return json.Marshal(resp)
 		}
 
-		// Do not register the inbound socket here. ReadLoop promotes it only
-		// after ACCEPT_JOIN and PEER_LIST have been written successfully.
+		// Do not register or persist the inbound socket here. It remains an
+		// in-memory request until an operator sends ACCEPT_JOIN for this exact ID.
 		peer.Endpoint = req.Address
-		peer.joinPeers = s.GetPeerList()
-		return json.Marshal(AcceptJoinMessage{Type: MsgAcceptJoin, Address: s.Endpoint})
+		s.addPendingRequest(&JoinRequest{
+			RequestID: req.RequestID,
+			NodeID:    req.NodeID,
+			Endpoint:  req.Address,
+			ExpiresAt: time.Now().Add(joinRequestTTL),
+			peer:      peer,
+		})
+		fmt.Printf("Pending join request %s from node %s at %s; expires at %s\n", req.RequestID, req.NodeID, req.Address, time.Now().Add(joinRequestTTL).Format(time.RFC3339))
+		return nil, nil
 
 	case MsgAcceptJoin:
-		// ACCEPT_JOIN is consumed synchronously by Server.JoinNetwork before the
-		// socket is promoted to a peer, so a received duplicate is harmless.
-		return nil, nil
+		var req AcceptJoinMessage
+		if err := json.Unmarshal(payload, &req); err != nil || req.RequestID == "" {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "Invalid JSON for ACCEPT_JOIN"})
+		}
+		if err := s.ApproveJoin(req.RequestID); err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+		return json.Marshal(ResponseMessage{Status: "Success", Result: fmt.Sprintf("Join request %s accepted.", req.RequestID)})
 
 	case MsgLeaveNetwork:
 		var req LeaveNetworkMessage
@@ -155,7 +174,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		s.RemovePeerByEndpoint(req.Address)
 		return nil, nil
 
-	case MsgPeerList:
+	case MsgPeerList, legacyMsgListPeers:
 		var req PeerListMessage
 		if err := json.Unmarshal(payload, &req); err != nil {
 			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for PEER_LIST"}

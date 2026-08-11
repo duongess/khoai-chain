@@ -304,7 +304,7 @@ RUN mkdir -p /app/data
 EXPOSE {{.Port}}
 
 # Khoi chay node
-CMD ["go", "run", "./cmd/node/main.go"]
+CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
@@ -403,7 +403,7 @@ RUN mkdir -p /app/data
 EXPOSE {{.Port}}
 
 # Khoi chay node
-CMD ["go", "run", "./cmd/node/main.go"]
+CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
@@ -500,6 +500,7 @@ services:
       - "{{.Port}}:{{.Port}}"
     volumes:
       - ./data/{{.Name}}:/app/data
+      - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -564,6 +565,7 @@ services:
       - "{{.Port}}:{{.Port}}"
     volumes:
       - ./data/{{.Name}}:/app/data
+      - ./nodes/{{.NodeID}}:/app/node-config
     restart: always
 {{end}}
 `
@@ -651,6 +653,7 @@ func main() {
 
 	// 5. Initialize P2P Server
 	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
 	// 6. Block main thread to keep the server running forever

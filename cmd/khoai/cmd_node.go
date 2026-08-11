@@ -8,7 +8,10 @@ import (
 	"khoai-chain/pkg/cli"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+const legacyMsgListPeers = "LIST_PEERS"
 
 // registerNodeCommands đăng ký các lệnh tương tác với node/container.
 func registerNodeCommands(app *cli.CLI, configPath string) {
@@ -129,8 +132,7 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		if err != nil {
 			return err
 		}
-		sendToNode(address, string(message))
-		return nil
+		return printNodeResponse(address, string(message))
 	})
 
 	app.AddCommand("leave", "Leave the current P2P network", func(args []string) error {
@@ -142,8 +144,18 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		if err != nil {
 			return err
 		}
-		sendToNode(address, string(message))
-		return nil
+		return printNodeResponse(address, string(message))
+	})
+
+	app.AddCommand("approve", "Approve a pending network join request", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. Node address and request ID are required. Example: khoai approve <localhost:9000> <request-id>")
+		}
+		message, err := json.Marshal(p2p.AcceptJoinMessage{Type: p2p.MsgAcceptJoin, RequestID: args[1]})
+		if err != nil {
+			return err
+		}
+		return printNodeResponse(args[0], string(message))
 	})
 
 	app.AddCommand("peers", "List peers known by a node", func(args []string) error {
@@ -155,7 +167,40 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		if err != nil {
 			return err
 		}
-		sendToNode(address, string(message))
+		response, err := sendToNode(address, string(message))
+		if err != nil {
+			return err
+		}
+		// Older released node images called this request LIST_PEERS. Keep the
+		// CLI usable while the containers are being rebuilt with PEER_LIST.
+		if isUnknownCommandResponse(response) {
+			legacy, err := json.Marshal(p2p.PeerListMessage{Type: legacyMsgListPeers, Request: true})
+			if err != nil {
+				return err
+			}
+			response, err = sendToNode(address, string(legacy))
+			if err != nil {
+				return err
+			}
+		}
+		fmt.Print(response)
 		return nil
 	})
+}
+
+func printNodeResponse(address, message string) error {
+	response, err := sendToNode(address, message)
+	if err != nil {
+		return err
+	}
+	fmt.Print(response)
+	return nil
+}
+
+func isUnknownCommandResponse(response string) bool {
+	var result p2p.ResponseMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(response)), &result); err != nil {
+		return false
+	}
+	return strings.EqualFold(result.Status, "Error") && strings.Contains(strings.ToLower(result.Error), "unknown command")
 }

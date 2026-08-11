@@ -81,21 +81,21 @@ func sanitize(name string) string {
 }
 
 // sendToNode gửi một tin nhắn đến một node qua kết nối TCP.
-func sendToNode(serverAddress string, message string) {
+func sendToNode(serverAddress string, message string) (string, error) {
 	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
-		fmt.Printf("Error connecting to node: %v\n", err)
-		return
+		return "", fmt.Errorf("error connecting to node: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Fprintf(conn, string(message)+"\n")
+	if _, err := fmt.Fprintf(conn, message+"\n"); err != nil {
+		return "", fmt.Errorf("could not send message: %w", err)
+	}
 
 	reader := bufio.NewReader(conn)
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Lost connection to server." + err.Error())
-		return
+		return "", fmt.Errorf("lost connection to server: %w", err)
 	}
-	fmt.Println(response)
+	return response, nil
 }

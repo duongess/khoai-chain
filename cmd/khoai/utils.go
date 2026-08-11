@@ -1,14 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"khoai-chain/internal/config"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -80,22 +83,45 @@ func sanitize(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
 }
 
-// sendToNode gửi một tin nhắn đến một node qua kết nối TCP.
-func sendToNode(serverAddress string, message string) (string, error) {
-	conn, err := net.Dial("tcp", serverAddress)
+func peerAPIAddress(p2pAddress string) string {
+	host, port, err := net.SplitHostPort(p2pAddress)
 	if err != nil {
-		return "", fmt.Errorf("error connecting to node: %w", err)
+		return p2pAddress
 	}
-	defer conn.Close()
-
-	if _, err := fmt.Fprintf(conn, message+"\n"); err != nil {
-		return "", fmt.Errorf("could not send message: %w", err)
-	}
-
-	reader := bufio.NewReader(conn)
-	response, err := reader.ReadString('\n')
+	n, err := strconv.Atoi(port)
 	if err != nil {
-		return "", fmt.Errorf("lost connection to server: %w", err)
+		return p2pAddress
 	}
-	return response, nil
+	return net.JoinHostPort(host, strconv.Itoa(n+1))
+}
+func peerAPI(address, method, path string, body any) error {
+	var reader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(data)
+	}
+	req, err := http.NewRequest(method, "http://"+peerAPIAddress(address)+path, reader)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return fmt.Errorf("peer API: %s: %s", res.Status, strings.TrimSpace(string(data)))
+	}
+	fmt.Print(string(data))
+	return nil
 }

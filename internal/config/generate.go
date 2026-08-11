@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -83,6 +84,14 @@ type RuntimeNodeConfig struct {
 	ID          string `yaml:"id"`
 	DisplayName string `yaml:"display_name"`
 	Endpoint    string `yaml:"endpoint"`
+}
+
+func mustNextPort(port string) int {
+	n, err := strconv.Atoi(port)
+	if err != nil || n >= 65535 {
+		return 0
+	}
+	return n + 1
 }
 
 // ChaincodeConfig defines a smart contract.
@@ -243,13 +252,14 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	// It includes new fields for organization/node info while retaining
 	// old fields for compatibility with the existing runtime.
 	type RuntimeConfigContent struct {
-		NodeName     string            `yaml:"node_name"`
-		DBPath       string            `yaml:"db_path"`
-		Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
-		Organization string            `yaml:"organization"`
-		NodeID       string            `yaml:"node_id"`
-		DisplayName  string            `yaml:"display_name"`
-		Endpoint     string            `yaml:"endpoint"`
+		NodeName        string            `yaml:"node_name"`
+		DBPath          string            `yaml:"db_path"`
+		Chaincodes      []ChaincodeConfig `yaml:"chaincodes"`
+		Organization    string            `yaml:"organization"`
+		NodeID          string            `yaml:"node_id"`
+		DisplayName     string            `yaml:"display_name"`
+		Endpoint        string            `yaml:"endpoint"`
+		PeerAPIEndpoint string            `yaml:"peer_api_endpoint"`
 	}
 
 	finalConfig := RuntimeConfigContent{
@@ -261,6 +271,8 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
 	finalConfig.Endpoint = listenEndpoint
+	apiPort, _ := strconv.Atoi(port)
+	finalConfig.PeerAPIEndpoint = fmt.Sprintf("0.0.0.0:%d", apiPort+1)
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -342,23 +354,25 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	listenEndpoint := fmt.Sprintf("0.0.0.0:%s", port)
 
 	type RuntimeConfigContent struct {
-		NodeName     string            `yaml:"node_name"`
-		DBPath       string            `yaml:"db_path"`
-		Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
-		Organization string            `yaml:"organization"`
-		NodeID       string            `yaml:"node_id"`
-		DisplayName  string            `yaml:"display_name"`
-		Endpoint     string            `yaml:"endpoint"`
+		NodeName        string            `yaml:"node_name"`
+		DBPath          string            `yaml:"db_path"`
+		Chaincodes      []ChaincodeConfig `yaml:"chaincodes"`
+		Organization    string            `yaml:"organization"`
+		NodeID          string            `yaml:"node_id"`
+		DisplayName     string            `yaml:"display_name"`
+		Endpoint        string            `yaml:"endpoint"`
+		PeerAPIEndpoint string            `yaml:"peer_api_endpoint"`
 	}
 
 	finalConfig := RuntimeConfigContent{
-		NodeName:     uniqueNodeName,
-		DBPath:       "/app/data",
-		Chaincodes:   org.Chaincodes,
-		Organization: org.DisplayName,
-		NodeID:       node.ID,
-		DisplayName:  node.DisplayName,
-		Endpoint:     listenEndpoint,
+		NodeName:        uniqueNodeName,
+		DBPath:          "/app/data",
+		Chaincodes:      org.Chaincodes,
+		Organization:    org.DisplayName,
+		NodeID:          node.ID,
+		DisplayName:     node.DisplayName,
+		Endpoint:        listenEndpoint,
+		PeerAPIEndpoint: fmt.Sprintf("0.0.0.0:%d", mustNextPort(port)),
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -448,6 +462,7 @@ func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 		OrgName string // sanitized org name: vingroup
 		NodeID  string // node id: hn
 		Port    string
+		APIPort int
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -463,6 +478,7 @@ func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 				OrgName: sanitizedOrgName,
 				NodeID:  node.ID,
 				Port:    port,
+				APIPort: mustNextPort(port),
 			})
 		}
 	}
@@ -498,6 +514,7 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.Port}}:{{.Port}}"
+      - "{{.APIPort}}:{{.APIPort}}"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
@@ -518,9 +535,10 @@ services:
 // GenerateWorkspaceDockerCompose creates a docker-compose.yaml file for a single organization workspace.
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
-		Name   string // unique name: vingroup-hn
-		NodeID string // node id: hn
-		Port   string
+		Name    string // unique name: vingroup-hn
+		NodeID  string // node id: hn
+		Port    string
+		APIPort int
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -533,9 +551,10 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 		}
 		allNodes = append(allNodes, ComposeNodeInfo{
-			Name:   fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-			NodeID: node.ID,
-			Port:   port,
+			Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			NodeID:  node.ID,
+			Port:    port,
+			APIPort: mustNextPort(port),
 		})
 	}
 
@@ -563,6 +582,7 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.Port}}:{{.Port}}"
+      - "{{.APIPort}}:{{.APIPort}}"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config

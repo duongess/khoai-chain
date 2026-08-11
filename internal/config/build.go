@@ -11,14 +11,15 @@ import (
 )
 
 type ConfigContent struct {
-	NodeName     string            `yaml:"node_name"`
-	DBPath       string            `yaml:"db_path"`
-	Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
-	Organization string            `yaml:"organization"`
-	NodeID       string            `yaml:"node_id"`
-	DisplayName  string            `yaml:"display_name"`
-	Endpoint     string            `yaml:"endpoint"`
-	Peers        []string          `yaml:"peers,omitempty"`
+	NodeName        string            `yaml:"node_name"`
+	DBPath          string            `yaml:"db_path"`
+	Chaincodes      []ChaincodeConfig `yaml:"chaincodes"`
+	Organization    string            `yaml:"organization"`
+	NodeID          string            `yaml:"node_id"`
+	DisplayName     string            `yaml:"display_name"`
+	Endpoint        string            `yaml:"endpoint"`
+	PeerAPIEndpoint string            `yaml:"peer_api_endpoint,omitempty"`
+	Peers           []string          `yaml:"peers,omitempty"`
 }
 
 func LoadConfig(filePath string) (*ConfigContent, error) {

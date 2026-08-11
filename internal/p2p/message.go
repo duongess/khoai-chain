@@ -8,12 +8,6 @@ const (
 	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
 	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
 
-	// Dynamic peer membership messages. Server peer operations remain local
-	// operations; they are deliberately not exposed as protocol messages.
-	MsgJoinNetwork  = "JOIN_NETWORK"
-	MsgAcceptJoin   = "ACCEPT_JOIN"
-	MsgLeaveNetwork = "LEAVE_NETWORK"
-	MsgPeerList     = "PEER_LIST"
 )
 
 // Request gửi qua TCP
@@ -27,6 +21,7 @@ type CommandMessage struct {
 
 type GetBlocksRequest struct {
 	Type   string   `json:"type"`
+	Sender string   `json:"sender,omitempty"`
 	Hashes [][]byte `json:"hashes"`
 }
 
@@ -40,31 +35,4 @@ type ResponseMessage struct {
 	Status string `json:"status"`
 	Result string `json:"result"`
 	Error  string `json:"error,omitempty"`
-}
-
-type JoinNetworkRequest struct {
-	Type      string `json:"type"`
-	RequestID string `json:"request_id,omitempty"`
-	NodeID    string `json:"node_id,omitempty"`
-	Address   string `json:"address"`             // Joining node's listening endpoint.
-	Bootstrap string `json:"bootstrap,omitempty"` // Set only by the local CLI command.
-}
-
-type AcceptJoinMessage struct {
-	Type      string `json:"type"`
-	RequestID string `json:"request_id"`
-	NodeID    string `json:"node_id,omitempty"`
-	Address   string `json:"address"`
-}
-
-type LeaveNetworkMessage struct {
-	Type    string `json:"type"`
-	Address string `json:"address"`
-}
-
-type PeerListMessage struct {
-	Type    string   `json:"type"`
-	Sender  string   `json:"sender,omitempty"`
-	Peers   []string `json:"peers,omitempty"`
-	Request bool     `json:"request,omitempty"`
 }

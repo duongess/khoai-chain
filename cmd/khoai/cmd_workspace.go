@@ -34,7 +34,7 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 	})
 
 	// Lệnh 'init' để khởi tạo một workspace mới.
-	app.AddCommand("init", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
+	app.AddCommand("init i", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
 		fmt.Println("Initializing new Khoai organization workspace in the current directory...")
 		_, err1 := os.Stat(config.ConfigFileName)
 		configExists := !os.IsNotExist(err1)
@@ -92,6 +92,31 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 		} else {
 			fmt.Println("\nAll nodes are up-to-date. No new artifacts were generated.")
 		}
+		return nil
+	})
+
+	app.AddCommand("update u", "update version of khoai source code and rebuild artifacts for all nodes in the workspace", func(args []string) error {
+		isWorkspace, err := isWorkspaceContext()
+		if err != nil {
+			return err
+		}
+		if !isWorkspace {
+			return fmt.Errorf("the 'update' command can only be run inside an initialized workspace (missing organization.yaml)")
+		}
+
+		fmt.Println("Updating Khoai source code to the latest version...")
+		version, err := downloadViaScript("latest", ".")
+		if err != nil {
+			return fmt.Errorf("failed to download source code: %w", err)
+		}
+		fmt.Printf("Successfully updated to version %s.\n", version)
+
+		fmt.Println("Rebuilding node artifacts in workspace...")
+		nodesGenerated, err := generateWorkspaceNodeArtifacts(true)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Successfully rebuilt artifacts for %d node(s).\n", nodesGenerated)
 		return nil
 	})
 }

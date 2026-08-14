@@ -17,7 +17,14 @@ type ConfigContent struct {
 	Organization string            `yaml:"organization"`
 	NodeID       string            `yaml:"node_id"`
 	DisplayName  string            `yaml:"display_name"`
-	Endpoint     string            `yaml:"endpoint"`
+	// Endpoint is retained for old runtime configs; new configs use the four
+	// explicit control-plane/data-plane addresses below.
+	Endpoint           string   `yaml:"endpoint,omitempty"`
+	HTTPListenEndpoint string   `yaml:"http_listen,omitempty"`
+	HTTPEndpoint       string   `yaml:"http_endpoint,omitempty"`
+	P2PListenEndpoint  string   `yaml:"p2p_listen,omitempty"`
+	P2PEndpoint        string   `yaml:"p2p_endpoint,omitempty"`
+	Peers              []string `yaml:"peers,omitempty"`
 }
 
 func LoadConfig(filePath string) (*ConfigContent, error) {
@@ -33,6 +40,24 @@ func LoadConfig(filePath string) (*ConfigContent, error) {
 	}
 
 	return &conf, nil
+}
+
+// SaveConfig persists a runtime node configuration. The temporary-file rename
+// prevents an interrupted write from leaving config.yaml partially written.
+func SaveConfig(filePath string, conf *ConfigContent) error {
+	data, err := yaml.Marshal(conf)
+	if err != nil {
+		return fmt.Errorf("could not encode config: %w", err)
+	}
+
+	tmpPath := filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("could not write temporary config: %w", err)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		return fmt.Errorf("could not replace config: %w", err)
+	}
+	return nil
 }
 
 // BuildExe builds the executable from the source code in a given directory.

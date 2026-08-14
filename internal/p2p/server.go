@@ -1,37 +1,80 @@
 package p2p
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
+	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"net"
+	"net/http"
 	"sync"
+	"time"
 )
 
 type Server struct {
-	Endpoint  string
-	Peers     map[string]*Peer
-	lock      sync.Mutex
-	Contracts *contract.ContractManager
+	Endpoint           string
+	P2PListenEndpoint  string
+	HTTPListenEndpoint string
+	HTTPEndpoint       string
+	NodeID             string
+	Peers              map[string]*Peer
+	lock               sync.RWMutex
+	Contracts          *contract.ContractManager
+	config             *config.ConfigContent
+	configPath         string
+	httpMux            *http.ServeMux
+	PendingJoins       map[string]time.Time // map[source_endpoint] -> expiration_time
 }
 
 func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
-	return &Server{
-		Endpoint:  endpoint,
-		Peers:     make(map[string]*Peer),
-		lock:      sync.Mutex{},
-		Contracts: contracts,
+	s := &Server{
+		Endpoint:     endpoint,
+		Peers:        make(map[string]*Peer),
+		PendingJoins: make(map[string]time.Time),
+		Contracts:    contracts,
+		httpMux:      http.NewServeMux(),
 	}
+	s.registerHTTPEndpoints()
+	return s
+}
+
+// ConfigurePersistence attaches this server to its runtime config.yaml. It is
+// called by the node executable after loading config; join requests are never
+// stored here, only accepted peers are.
+func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath string) {
+	s.lock.Lock()
+	s.config = conf
+	s.configPath = configPath
+	if conf != nil {
+		s.NodeID = conf.NodeID
+		if conf.P2PEndpoint != "" {
+			s.Endpoint = conf.P2PEndpoint
+		}
+		if conf.P2PListenEndpoint != "" {
+			s.P2PListenEndpoint = conf.P2PListenEndpoint
+		}
+		if conf.HTTPListenEndpoint != "" {
+			s.HTTPListenEndpoint = conf.HTTPListenEndpoint
+		}
+		if conf.HTTPEndpoint != "" {
+			s.HTTPEndpoint = conf.HTTPEndpoint
+		}
+	}
+	s.lock.Unlock()
 }
 
 func (s *Server) Start() {
-	listener, err := net.Listen("tcp", s.Endpoint)
+	listenEndpoint := s.P2PListenEndpoint
+	if listenEndpoint == "" {
+		listenEndpoint = s.Endpoint
+	}
+	listener, err := net.Listen("tcp", listenEndpoint)
 	if err != nil {
-		panic(fmt.Sprintf("Could not open port %s: %v", s.Endpoint, err))
+		panic(fmt.Sprintf("Could not open port %s: %v", listenEndpoint, err))
 	}
 
-	fmt.Printf("Server running on port %s. Waiting for connections...\n", s.Endpoint)
+	fmt.Printf("P2P data plane listening on %s (advertised as %s)\n", listenEndpoint, s.Endpoint)
+	go s.connectPersistedPeers()
 
 	for {
 		conn, err := listener.Accept()
@@ -43,6 +86,12 @@ func (s *Server) Start() {
 		// JOIN_NETWORK request must not add the requester before approval.
 		go NewPeer(conn, s.Contracts).ReadLoop(s)
 	}
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// This makes the Server struct a valid http.Handler by delegating
+	// requests to its internal ServeMux.
+	s.httpMux.ServeHTTP(w, r)
 }
 
 func (s *Server) Stop() {
@@ -68,8 +117,6 @@ func (s *Server) ConnectToPeer(address string) {
 		return
 	}
 	s.addPeer(conn, address)
-	hello, _ := json.Marshal(PeerListMessage{Type: MsgPeerList, Sender: s.Endpoint})
-	_, _ = conn.Write(append(hello, '\n'))
 	fmt.Println("Sending initial sync request...")
 	if s.Contracts == nil || s.Contracts.Chain == nil {
 		return
@@ -77,6 +124,7 @@ func (s *Server) ConnectToPeer(address string) {
 	hashes := s.Contracts.Chain.GetBlockHashes()
 	req := GetBlocksRequest{
 		Type:   MsgGetChain,
+		Sender: s.Endpoint,
 		Hashes: hashes,
 	}
 	reqBytes, _ := json.Marshal(req)
@@ -97,12 +145,6 @@ func (s *Server) addPeer(conn net.Conn, endpoint string) {
 func (s *Server) addPeerObject(peer *Peer) {
 	s.registerPeer(peer)
 	go peer.ReadLoop(s)
-}
-
-// RegisterPendingPeer promotes a socket that completed the JOIN/ACCEPT flow.
-// It is intentionally a Server operation, not a wire-protocol operation.
-func (s *Server) RegisterPendingPeer(peer *Peer) {
-	s.registerPeer(peer)
 }
 
 func (s *Server) registerPeer(peer *Peer) {
@@ -155,55 +197,7 @@ func (s *Server) DisconnectToPeer(address string) {
 	}
 }
 
-func (s *Server) JoinNetwork(address string) {
-	if address == "" || address == s.Endpoint || s.HasPeer(address) {
-		return
-	}
-
-	fmt.Println("Joining network via", address)
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Printf("Can't join network via %s: %v\n", address, err)
-		return
-	}
-
-	join, err := json.Marshal(JoinNetworkRequest{Type: MsgJoinNetwork, Address: s.Endpoint})
-	if err != nil {
-		conn.Close()
-		return
-	}
-	if _, err := conn.Write(append(join, '\n')); err != nil {
-		conn.Close()
-		return
-	}
-
-	joiningPeer := NewPeer(conn, s.Contracts)
-	reader := bufio.NewReader(conn)
-	joiningPeer.reader = reader
-	line, err := reader.ReadBytes('\n')
-	if err != nil {
-		fmt.Printf("Join request to %s failed: %v\n", address, err)
-		conn.Close()
-		return
-	}
-	var accepted AcceptJoinMessage
-	if err := json.Unmarshal(line, &accepted); err != nil || accepted.Type != MsgAcceptJoin {
-		fmt.Printf("Join request to %s was not accepted\n", address)
-		conn.Close()
-		return
-	}
-
-	// The accepted JOIN socket is the actual peer connection. It is registered
-	// only after ACCEPT_JOIN, while the peer-list response is read by ReadLoop.
-	joiningPeer.Endpoint = address
-	s.addPeerObject(joiningPeer)
-}
-
 func (s *Server) LeaveNetwork() {
-	leave, _ := json.Marshal(LeaveNetworkMessage{Type: MsgLeaveNetwork, Address: s.Endpoint})
-	for _, peer := range s.peerSnapshot() {
-		_ = peer.Send(append(leave, '\n'))
-	}
 	s.Stop()
 }
 
@@ -216,20 +210,32 @@ func (s *Server) RemovePeerByEndpoint(endpoint string) {
 	s.lock.Unlock()
 	if ok {
 		_ = peer.Conn.Close()
+		s.removePersistedPeer(endpoint)
 		fmt.Printf("Peer %s left the network. Total Peers: %d\n", endpoint, len(s.GetPeerList()))
 	}
 }
 
 func (s *Server) HasPeer(endpoint string) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	_, ok := s.Peers[endpoint]
 	return ok
 }
 
+// IsLocalEndpoint accepts the configured listener and shorthand addresses such
+// as :8082 used by the local khoai CLI.
+func (s *Server) IsLocalEndpoint(endpoint string) bool {
+	if endpoint == s.Endpoint {
+		return true
+	}
+	_, requestedPort, requestErr := net.SplitHostPort(endpoint)
+	_, serverPort, serverErr := net.SplitHostPort(s.Endpoint)
+	return requestErr == nil && serverErr == nil && requestedPort == serverPort
+}
+
 func (s *Server) peerSnapshot() []*Peer {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	peers := make([]*Peer, 0, len(s.Peers))
 	for _, peer := range s.Peers {
 		peers = append(peers, peer)
@@ -248,8 +254,8 @@ func (s *Server) ListPeers() {
 }
 
 func (s *Server) GetPeerList() []string {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
 	peers := make([]string, 0, len(s.Peers))
 	for addr := range s.Peers {
@@ -257,6 +263,90 @@ func (s *Server) GetPeerList() []string {
 	}
 
 	return peers
+}
+
+func (s *Server) addPendingJoin(sourceEndpoint string) {
+	s.lock.Lock()
+	expiresAt := time.Now().Add(config.JoinRequestTTL * time.Second)
+	s.PendingJoins[sourceEndpoint] = expiresAt
+	s.lock.Unlock()
+
+	time.AfterFunc(time.Until(expiresAt), func() {
+		s.expirePendingJoin(sourceEndpoint)
+	})
+}
+
+func (s *Server) expirePendingJoin(sourceEndpoint string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	expiresAt, ok := s.PendingJoins[sourceEndpoint]
+	if !ok || time.Now().Before(expiresAt) {
+		return
+	}
+	delete(s.PendingJoins, sourceEndpoint)
+	fmt.Printf("Pending join from %s expired\n", sourceEndpoint)
+}
+
+func (s *Server) approvePendingJoin(sourceEndpoint string) bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	expiresAt, ok := s.PendingJoins[sourceEndpoint]
+	if !ok || time.Now().After(expiresAt) {
+		return false
+	}
+	delete(s.PendingJoins, sourceEndpoint)
+	return true
+}
+
+func (s *Server) connectPersistedPeers() {
+	s.lock.RLock()
+	if s.config == nil {
+		s.lock.RUnlock()
+		return
+	}
+	peers := append([]string(nil), s.config.Peers...)
+	s.lock.RUnlock()
+	for _, endpoint := range peers {
+		go s.ConnectToPeer(endpoint)
+	}
+}
+
+func (s *Server) persistPeer(endpoint string) {
+	if endpoint == "" || endpoint == s.Endpoint {
+		return
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.config == nil || s.configPath == "" {
+		return
+	}
+	for _, peer := range s.config.Peers {
+		if peer == endpoint {
+			return
+		}
+	}
+	s.config.Peers = append(s.config.Peers, endpoint)
+	if err := config.SaveConfig(s.configPath, s.config); err != nil {
+		fmt.Printf("Could not persist peer %s: %v\n", endpoint, err)
+	}
+}
+
+func (s *Server) removePersistedPeer(endpoint string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.config == nil || s.configPath == "" {
+		return
+	}
+	peers := s.config.Peers[:0]
+	for _, peer := range s.config.Peers {
+		if peer != endpoint {
+			peers = append(peers, peer)
+		}
+	}
+	s.config.Peers = peers
+	if err := config.SaveConfig(s.configPath, s.config); err != nil {
+		fmt.Printf("Could not remove persisted peer %s: %v\n", endpoint, err)
+	}
 }
 
 func (s *Server) Broadcast(msg string) {

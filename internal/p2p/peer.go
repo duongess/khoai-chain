@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"khoai-chain/internal/contract"
 	"net"
@@ -13,7 +12,6 @@ type Peer struct {
 	Conn       net.Conn
 	Contracts  *contract.ContractManager
 	Endpoint   string
-	joinPeers  []string
 	registered bool
 	reader     *bufio.Reader
 	writeLock  sync.Mutex
@@ -73,13 +71,5 @@ func (p *Peer) ReadLoop(s *Server) {
 			}
 		}
 
-		if p.joinPeers != nil {
-			peerList, err := json.Marshal(PeerListMessage{Type: MsgPeerList, Sender: s.Endpoint, Peers: p.joinPeers})
-			if err != nil || p.Send(append(peerList, '\n')) != nil {
-				return
-			}
-			p.joinPeers = nil
-			s.RegisterPendingPeer(p)
-		}
 	}
 }

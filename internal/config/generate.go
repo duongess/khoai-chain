@@ -510,9 +510,9 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.HostHTTPPort}}:8080"
+      - "{{.Port}}:9000"
     expose:
-      - "9000"
+      - "{{.Port}}"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
@@ -533,9 +533,9 @@ services:
 // GenerateWorkspaceDockerCompose creates a docker-compose.yaml file for a single organization workspace.
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
-		Name         string // unique name: vingroup-hn
-		NodeID       string // node id: hn
-		HostHTTPPort string
+		Name   string // unique name: vingroup-hn
+		NodeID string // node id: hn
+		Port   string
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -548,9 +548,9 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 		}
 		allNodes = append(allNodes, ComposeNodeInfo{
-			Name:         fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-			NodeID:       node.ID,
-			HostHTTPPort: port,
+			Name:   fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			NodeID: node.ID,
+			Port:   port,
 		})
 	}
 
@@ -583,9 +583,9 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.Port}}:{{.Port}}"
+      - "{{.Port}}:9000"
     expose:
-      - "9000"
+      - "{{.Port}}"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config
@@ -614,6 +614,7 @@ func generateMainFile(outputDir string, chaincodes []ChaincodeConfig) error {
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -677,14 +678,21 @@ func main() {
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 	// 5. Initialize P2P Server
-	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	// The P2P server handles the core blockchain protocol (block and transaction gossip).
+	srv := p2p.NewServer(conf.P2PListenEndpoint, contractManager)
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 6. Block main thread to keep the server running forever
-	select {}
+	// 6. Initialize HTTP Control Plane
+	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
+	// We assume the 'p2p.Server' struct also implements http.Handler to serve these requests.
+	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
+	go func() {
+		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
+	}()
 
-	nodeCLI.Run()
+	// 7. Block main thread to keep the server running forever
+	select {}
 }
 	`
 

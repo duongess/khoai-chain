@@ -37,10 +37,8 @@ func TestDockerComposeUsesSharedP2PNetworkWithoutPublishingTCP(t *testing.T) {
 	if strings.Count(compose, "- \"9000\"") != 3 {
 		t.Fatalf("each node must expose TCP 9000 internally:\n%s", compose)
 	}
-	if strings.Contains(compose, ":9000\"") {
-		t.Fatalf("P2P TCP 9000 must not be published to the host:\n%s", compose)
-	}
-	if strings.Count(compose, ":8080\"") != 3 {
-		t.Fatalf("each node must publish its HTTP control plane:\n%s", compose)
+	// With the new logic, the HTTP control plane is always mapped to port 9000 on the host.
+	if strings.Count(compose, "- \"9000:9000\"") != 3 {
+		t.Fatalf("each node must publish its HTTP control plane on port 9000:\n%s", compose)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -473,15 +472,13 @@ func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 			if err != nil {
 				return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 			}
-			p2pPortInt, _ := strconv.Atoi(p2pPort)
-			httpPort := p2pPortInt + 10000
 
 			allNodes = append(allNodes, ComposeNodeInfo{
 				Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
 				OrgName:  sanitizedOrgName,
 				NodeID:   node.ID,
 				P2PPort:  p2pPort,
-				HTTPPort: fmt.Sprintf("%d", httpPort),
+				HTTPPort: "9000",
 			})
 		}
 	}
@@ -556,14 +553,12 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 		if err != nil {
 			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 		}
-		p2pPortInt, _ := strconv.Atoi(p2pPort)
-		httpPort := p2pPortInt + 10000
 
 		allNodes = append(allNodes, ComposeNodeInfo{
 			Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
 			NodeID:   node.ID,
 			P2PPort:  p2pPort,
-			HTTPPort: fmt.Sprintf("%d", httpPort),
+			HTTPPort: "9000",
 		})
 	}
 

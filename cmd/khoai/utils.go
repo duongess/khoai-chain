@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -124,18 +123,20 @@ func peerAPI(address, method, path string, body any, out any) error {
 
 // p2pToHTTP converts a P2P endpoint (e.g., "localhost:8080") to its corresponding
 // control plane HTTP endpoint (e.g., "localhost:9000").
-// In our single-host Docker simulation, we map the internal container port 9000
-// to a host port derived from the P2P port (e.g., 8080 -> 18080).
+// The control plane for a node is assumed to be exposed on port 9000 on the host.
 func p2pToHTTP(p2pEndpoint string) string {
-	host, p2pPortStr, err := net.SplitHostPort(p2pEndpoint)
+	host, _, err := net.SplitHostPort(p2pEndpoint)
 	if err != nil {
-		// Fallback for addresses without host, e.g., ":8080"
+		// This can happen for invalid formats.
+		// For an address like ":8080", SplitHostPort returns host="", port="8080", err=nil.
+		// We default to localhost for any case where the host is not explicit.
 		host = "localhost"
-		p2pPortStr = strings.TrimPrefix(p2pEndpoint, ":")
 	}
-	p2pPort, _ := strconv.Atoi(p2pPortStr)
-	httpPort := p2pPort + 10000
-	return net.JoinHostPort(host, fmt.Sprintf("%d", httpPort))
+	if host == "" || host == "0.0.0.0" {
+		host = "localhost"
+	}
+	// The control plane HTTP port is always 9000.
+	return net.JoinHostPort(host, "9000")
 }
 
 // findNodeInternalAddressByEndpoint finds a node by its host-facing endpoint (e.g., "localhost:8082")

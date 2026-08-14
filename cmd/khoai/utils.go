@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"khoai-chain/internal/config"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -82,7 +83,7 @@ func sanitize(name string) string {
 }
 
 func peerAPIAddress(address string) string { return address }
-func peerAPI(address, method, path string, body any) error {
+func peerAPI(address, method, path string, body any, out any) error {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -103,12 +104,18 @@ func peerAPI(address, method, path string, body any) error {
 		return err
 	}
 	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		data, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("peer API: %s: %s", res.Status, strings.TrimSpace(string(data)))
+	}
+
+	if out != nil {
+		return json.NewDecoder(res.Body).Decode(out)
+	}
+
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
-	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("peer API: %s: %s", res.Status, strings.TrimSpace(string(data)))
 	}
 	fmt.Print(string(data))
 	return nil
@@ -122,4 +129,45 @@ func p2pToHTTP(p2pEndpoint string) string {
 	// defined in khoai-config.yaml. Therefore, the HTTP endpoint on the host
 	// is the same as the P2P endpoint.
 	return p2pEndpoint
+}
+
+// findNodeInternalAddressByEndpoint finds a node by its host-facing endpoint (e.g., "localhost:8082")
+// and returns its internal Docker network address (e.g., "coteccons-hcm:8082").
+func findNodeInternalAddressByEndpoint(configPath, hostEndpoint string) (string, error) {
+	builderConf, err := config.LoadBuilderConfig(configPath)
+	if err != nil {
+		// This can happen in a workspace context where the main config is not in the root.
+		// We can try to load from the current directory.
+		if os.IsNotExist(err) {
+			builderConf, err = config.LoadBuilderConfig("khoai-config.yaml")
+		}
+		if err != nil {
+			return "", fmt.Errorf("could not load builder config from %s: %w", configPath, err)
+		}
+	}
+
+	// Normalize endpoint to look for just the port
+	_, port, err := net.SplitHostPort(hostEndpoint)
+	if err != nil {
+		if strings.HasPrefix(hostEndpoint, ":") {
+			port = hostEndpoint[1:]
+		} else {
+			return "", fmt.Errorf("invalid endpoint format: %s", hostEndpoint)
+		}
+	}
+
+	for _, org := range builderConf.Organizations {
+		for _, node := range org.Nodes {
+			_, nodePort, _ := net.SplitHostPort(node.Endpoint)
+			if nodePort == port {
+				// Found it. Construct the internal docker name.
+				sanitizedOrgName := sanitize(org.DisplayName)
+				internalName := fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID)
+				internalEndpoint := fmt.Sprintf("%s:%s", internalName, nodePort)
+				return internalEndpoint, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no node found with endpoint port %s", port)
 }

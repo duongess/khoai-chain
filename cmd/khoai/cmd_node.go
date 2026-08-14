@@ -113,19 +113,54 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return runCommand("docker", "compose", "-f", composeFile, "logs", "-f", "--tail", "100", nodeToLog)
 	})
 
-	app.AddCommand("join", "Connect a source node to a target node", func(args []string) error {
+	app.AddCommand("join", "Request for a source node to join a target node", func(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("invalid command. Source and target P2P endpoints are required. Example: khoai join :8080 :8082")
 		}
-		sourceP2P := normalizeNodeAddress(args[0])
-		targetP2P := normalizeNodeAddress(args[1])
+		sourceP2P_onHost := normalizeNodeAddress(args[0])
+		targetP2P_onHost := normalizeNodeAddress(args[1])
 
-		// The API call goes to the source node's HTTP endpoint.
-		httpEndpoint := p2pToHTTP(sourceP2P)
+		// Resolve the source's host endpoint to its internal Docker network address.
+		sourceP2P_inDocker, err := findNodeInternalAddressByEndpoint(configPath, sourceP2P_onHost)
+		if err != nil {
+			return fmt.Errorf("could not resolve source endpoint %s: %w", sourceP2P_onHost, err)
+		}
 
-		fmt.Printf("Sending join request to %s for node %s to connect to %s\n", httpEndpoint, sourceP2P, targetP2P)
+		// The API call goes to the TARGET node's HTTP endpoint.
+		httpEndpoint := p2pToHTTP(targetP2P_onHost)
 
-		return peerAPI(httpEndpoint, "POST", "/join", map[string]string{"target": targetP2P})
+		fmt.Printf("Sending join request to %s for node %s to be allowed to join\n", httpEndpoint, sourceP2P_inDocker)
+
+		var resp struct {
+			RequestID string `json:"request_id"`
+		}
+		err = peerAPI(httpEndpoint, "POST", "/join", map[string]string{"source_endpoint": sourceP2P_inDocker}, &resp)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("\nJoin request sent successfully.\n")
+		fmt.Printf("Request ID: %s\n", resp.RequestID)
+		fmt.Printf("To approve, run: khoai approve %s %s\n", targetP2P_onHost, resp.RequestID)
+		return nil
+	})
+
+	app.AddCommand("requests", "List pending join requests on a node", func(args []string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("invalid command. Target node address is required. Example: khoai requests :8082")
+		}
+		targetNode := normalizeNodeAddress(args[0])
+		return peerAPI(targetNode, "GET", "/join-requests", nil, nil)
+	})
+
+	app.AddCommand("approve", "Approve a pending join request on a target node", func(args []string) error {
+		if len(args) < 2 {
+			return fmt.Errorf("invalid command. Target node address and request ID are required. Example: khoai approve :8082 <request_id>")
+		}
+		targetNode := normalizeNodeAddress(args[0])
+		requestID := args[1]
+
+		fmt.Printf("Sending approval for request %s to node %s...\n", requestID, targetNode)
+		return peerAPI(targetNode, "POST", "/approve", map[string]string{"request_id": requestID}, nil)
 	})
 
 	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {
@@ -134,14 +169,14 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		}
 		address := args[0]
 		address = normalizeNodeAddress(address)
-		return peerAPI(address, "POST", "/leave", nil)
+		return peerAPI(address, "POST", "/leave", nil, nil)
 	})
 
 	app.AddCommand("remove-peer", "Remove a peer through the HTTP control API", func(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("invalid command. HTTP node address and P2P peer endpoint are required. Example: khoai remove-peer localhost:8080 localhost:8081")
 		}
-		return peerAPI(normalizeNodeAddress(args[0]), "POST", "/peers/remove", map[string]string{"endpoint": args[1]})
+		return peerAPI(normalizeNodeAddress(args[0]), "POST", "/peers/remove", map[string]string{"endpoint": args[1]}, nil)
 	})
 
 	app.AddCommand("peers", "List peers through the node HTTP control API", func(args []string) error {
@@ -150,7 +185,7 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		}
 		address := args[0]
 		address = normalizeNodeAddress(address)
-		return peerAPI(address, "GET", "/peers", nil)
+		return peerAPI(address, "GET", "/peers", nil, nil)
 	})
 }
 

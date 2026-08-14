@@ -1,20 +1,26 @@
 package p2p
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"khoai-chain/internal/config"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // This method sets up the HTTP routes for the node's control plane.
 func (s *Server) registerHTTPEndpoints() {
 	s.httpMux.HandleFunc("/peers", s.handlePeers)
 	s.httpMux.HandleFunc("/peers/remove", s.handleRemovePeer)
-	s.httpMux.HandleFunc("/join", s.handleJoin)
-	s.httpMux.HandleFunc("/persist-peer", s.handlePersistPeer)
+	s.httpMux.HandleFunc("/join", s.handleCreateJoinRequest)
+	s.httpMux.HandleFunc("/join-requests", s.handleListJoinRequests)
+	s.httpMux.HandleFunc("/approve", s.handleApproveJoin)
+	s.httpMux.HandleFunc("/add-peer", s.handleAddPeer)
 	s.httpMux.HandleFunc("/leave", s.handleLeave)
 	s.httpMux.HandleFunc("/leave-notice", s.handleLeaveNotice)
 }
@@ -43,47 +49,94 @@ func (s *Server) handleRemovePeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
-// handleJoin receives a request for this node to connect to a target peer.
-func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
+// handleCreateJoinRequest receives a request from a potential new peer.
+// It creates a pending request that must be approved by an admin.
+func (s *Server) handleCreateJoinRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var body struct {
-		Source string `json:"source"` // Optional, for compatibility
-		Target string `json:"target"`
+		SourceEndpoint string `json:"source_endpoint"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Target == "" {
-		http.Error(w, "target P2P endpoint is required in JSON body", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.SourceEndpoint == "" {
+		http.Error(w, "source_endpoint is required in JSON body", http.StatusBadRequest)
 		return
 	}
 
-	targetP2P := body.Target
-	sourceP2P := s.Endpoint
-
-	if s.IsLocalEndpoint(targetP2P) {
-		http.Error(w, "cannot join self", http.StatusBadRequest)
-		return
-	}
-
-	fmt.Printf("Received join request: this node (%s) will connect to %s\n", sourceP2P, targetP2P)
-
-	// 1. Connect to the target and persist it.
-	go s.ConnectToPeer(targetP2P)
-	s.persistPeer(targetP2P)
-
-	// 2. Tell the target to connect back and persist us.
-	// This ensures the connection is mutual and survives restarts.
-	targetHTTP := controlAPIFor(targetP2P)
-	err := postJSON(targetHTTP, "/persist-peer", map[string]string{"endpoint": sourceP2P}, nil)
+	id, err := requestID()
 	if err != nil {
-		fmt.Printf("Warning: could not ask target %s to persist us back: %v\n", targetP2P, err)
+		http.Error(w, "could not generate request ID", http.StatusInternalServerError)
+		return
+	}
+
+	req := &JoinRequest{
+		RequestID:      id,
+		SourceEndpoint: body.SourceEndpoint,
+		ExpiresAt:      time.Now().Add(config.JoinRequestTTL),
+	}
+	s.addPendingRequest(req)
+
+	fmt.Printf("Received join request from %s. Request ID: %s\n", req.SourceEndpoint, req.RequestID)
+	writeJSON(w, http.StatusAccepted, req)
+}
+
+func (s *Server) handleListJoinRequests(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	requests := make([]*JoinRequest, 0, len(s.PendingRequests))
+	for _, req := range s.PendingRequests {
+		requests = append(requests, req)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"join_requests": requests})
+}
+
+// handleApproveJoin finalizes a connection from a pending request.
+func (s *Server) handleApproveJoin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RequestID == "" {
+		http.Error(w, "request_id is required", http.StatusBadRequest)
+		return
+	}
+
+	req, ok := s.takePendingRequest(body.RequestID)
+	if !ok {
+		http.Error(w, "join request not found or expired", http.StatusNotFound)
+		return
+	}
+
+	sourceEndpoint := req.SourceEndpoint
+	targetEndpoint := s.Endpoint
+
+	fmt.Printf("Approving join request %s: this node (%s) will connect to %s\n", req.RequestID, targetEndpoint, sourceEndpoint)
+
+	// 1. Connect to the source and persist it.
+	go s.ConnectToPeer(sourceEndpoint)
+	s.persistPeer(sourceEndpoint)
+
+	// 2. Tell the source to connect back and persist us.
+	sourceHTTP := controlAPIFor(sourceEndpoint)
+	err := postJSON(sourceHTTP, "/add-peer", map[string]string{"endpoint": targetEndpoint}, nil)
+	if err != nil {
+		// This is not a fatal error, but should be logged. The connection might be one-way for now.
+		fmt.Printf("Warning: could not ask source %s to persist us back: %v\n", sourceEndpoint, err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "ok",
-		"detail": fmt.Sprintf("Join process initiated from %s to %s", sourceP2P, targetP2P),
+		"status": "approved",
+		"detail": fmt.Sprintf("Join process approved for %s", sourceEndpoint),
 	})
 }
 
@@ -115,8 +168,9 @@ func (s *Server) handleLeaveNotice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
-// handlePersistPeer receives a request from another peer to be added to the persistent peer list.
-func (s *Server) handlePersistPeer(w http.ResponseWriter, r *http.Request) {
+// handleAddPeer receives a request from another peer (during its approval process)
+// to be added to the persistent peer list.
+func (s *Server) handleAddPeer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -129,16 +183,16 @@ func (s *Server) handlePersistPeer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peerToPersist := body.Endpoint
-	fmt.Printf("Received request to persist peer: %s\n", peerToPersist)
+	peerToAdd := body.Endpoint
+	fmt.Printf("Received request to add peer: %s\n", peerToAdd)
 
 	// Also connect back if not already connected
-	if !s.HasPeer(peerToPersist) {
-		go s.ConnectToPeer(peerToPersist)
+	if !s.HasPeer(peerToAdd) {
+		go s.ConnectToPeer(peerToAdd)
 	}
-	s.persistPeer(peerToPersist)
+	s.persistPeer(peerToAdd)
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "persisted"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "added"})
 }
 
 func controlAPIFor(endpoint string) string {
@@ -150,6 +204,14 @@ func controlAPIFor(endpoint string) string {
 		return endpoint
 	}
 	return net.JoinHostPort(host, "9000")
+}
+
+func requestID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func postJSON(endpoint, path string, body any, out any) error {

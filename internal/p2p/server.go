@@ -8,7 +8,18 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 )
+
+type JoinRequest struct {
+	RequestID      string
+	NodeID         string
+	Endpoint       string
+	APIEndpoint    string
+	ExpiresAt      time.Time
+	outbound       bool
+	SourceEndpoint string
+}
 
 type Server struct {
 	Endpoint           string
@@ -22,14 +33,16 @@ type Server struct {
 	config             *config.ConfigContent
 	configPath         string
 	httpMux            *http.ServeMux
+	PendingRequests    map[string]*JoinRequest
 }
 
 func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 	s := &Server{
-		Endpoint:  endpoint,
-		Peers:     make(map[string]*Peer),
-		Contracts: contracts,
-		httpMux:   http.NewServeMux(),
+		Endpoint:        endpoint,
+		Peers:           make(map[string]*Peer),
+		PendingRequests: make(map[string]*JoinRequest),
+		Contracts:       contracts,
+		httpMux:         http.NewServeMux(),
 	}
 	s.registerHTTPEndpoints()
 	return s
@@ -260,6 +273,37 @@ func (s *Server) GetPeerList() []string {
 	}
 
 	return peers
+}
+
+func (s *Server) addPendingRequest(request *JoinRequest) {
+	s.lock.Lock()
+	s.PendingRequests[request.RequestID] = request
+	s.lock.Unlock()
+	time.AfterFunc(time.Until(request.ExpiresAt), func() {
+		s.expirePendingRequest(request.RequestID)
+	})
+}
+
+func (s *Server) expirePendingRequest(requestID string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	request, ok := s.PendingRequests[requestID]
+	if !ok || time.Now().Before(request.ExpiresAt) {
+		return
+	}
+	delete(s.PendingRequests, requestID)
+	fmt.Printf("Join request %s from %s expired\n", requestID, request.SourceEndpoint)
+}
+
+func (s *Server) takePendingRequest(requestID string) (*JoinRequest, bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	req, ok := s.PendingRequests[requestID]
+	if !ok || time.Now().After(req.ExpiresAt) {
+		return nil, false
+	}
+	delete(s.PendingRequests, requestID)
+	return req, true
 }
 
 func (s *Server) connectPersistedPeers() {

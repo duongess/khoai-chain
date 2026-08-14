@@ -85,6 +85,12 @@ func (s *Server) Start() {
 	}
 }
 
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// This makes the Server struct a valid http.Handler by delegating
+	// requests to its internal ServeMux.
+	s.httpMux.ServeHTTP(w, r)
+}
+
 func (s *Server) Stop() {
 	fmt.Println("Stopping server and disconnecting all peers...")
 	s.lock.Lock()

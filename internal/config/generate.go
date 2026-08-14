@@ -625,7 +625,6 @@ import (
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/p2p"
-	"khoai-chain/pkg/cli"
 
 	{{range .Imports}}	"{{.}}"
 	{{end}}
@@ -641,8 +640,6 @@ func main() {
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
-
-	nodeCLI := cli.NewCLI()
 
 	// 1. Load Config
 	conf, err := config.LoadConfig(*configPathFlag)

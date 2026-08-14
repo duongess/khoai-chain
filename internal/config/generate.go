@@ -410,7 +410,7 @@ COPY contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE 8080 9000
+EXPOSE {{.Port}} 9000
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
@@ -454,10 +454,10 @@ func sourceArchiveFromVersionFile(versionFile string) (string, error) {
 func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	// We need to create a flat list of nodes for the template.
 	type ComposeNodeInfo struct {
-		Name         string // unique name: vingroup-hn
-		OrgName      string // sanitized org name: vingroup
-		NodeID       string // node id: hn
-		HostHTTPPort string
+		Name    string // unique name: vingroup-hn
+		OrgName string // sanitized org name: vingroup
+		NodeID  string // node id: hn
+		Port    string
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -469,10 +469,10 @@ func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 				return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 			}
 			allNodes = append(allNodes, ComposeNodeInfo{
-				Name:         fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-				OrgName:      sanitizedOrgName,
-				NodeID:       node.ID,
-				HostHTTPPort: port,
+				Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+				OrgName: sanitizedOrgName,
+				NodeID:  node.ID,
+				Port:    port,
 			})
 		}
 	}
@@ -580,7 +580,7 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.HostHTTPPort}}:8080"
+      - "{{.Port}}:{{.Port}}"
     expose:
       - "9000"
     volumes:

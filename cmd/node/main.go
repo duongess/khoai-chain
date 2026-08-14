@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -110,11 +111,20 @@ func startNode(configPath string, isDevMode bool) {
 
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
-	// 6. Initialize P2P Server
-	srv := p2p.NewServer(conf.Endpoint, contractManager)
-	srv.ConfigurePersistence(conf, configPath)
+	// 5. Initialize P2P Server
+	// The P2P server handles the core blockchain protocol (block and transaction gossip).
+	srv := p2p.NewServer(conf.P2PEndpoint, contractManager)
+	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 8. Block main thread to keep the server running forever
+	// 6. Initialize HTTP Control Plane
+	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
+	// We assume the 'p2p.Server' struct also implements http.Handler to serve these requests.
+	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
+	go func() {
+		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
+	}()
+
+	// 7. Block main thread to keep the server running forever
 	select {}
 }

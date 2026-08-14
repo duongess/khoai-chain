@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"khoai-chain/internal/config"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -112,4 +113,15 @@ func peerAPI(address, method, path string, body any) error {
 	}
 	fmt.Print(string(data))
 	return nil
+}
+
+// p2pToHTTP converts a P2P endpoint (e.g., "localhost:8080") to its corresponding
+// control plane HTTP endpoint (e.g., "localhost:9000").
+func p2pToHTTP(p2pEndpoint string) string {
+	host, _, err := net.SplitHostPort(p2pEndpoint)
+	if err != nil {
+		// Handles cases like "localhost" or "vingroup-hn" where port is omitted
+		return net.JoinHostPort(p2pEndpoint, "9000")
+	}
+	return net.JoinHostPort(host, "9000")
 }

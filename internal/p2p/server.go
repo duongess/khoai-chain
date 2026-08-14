@@ -6,22 +6,9 @@ import (
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"net"
+	"net/http"
 	"sync"
-	"time"
 )
-
-const joinRequestTTL = 5 * time.Minute
-
-// JoinRequest is deliberately RAM-only. A request becomes a persistent peer
-// only after an explicit ACCEPT_JOIN.
-type JoinRequest struct {
-	RequestID   string
-	NodeID      string
-	Endpoint    string // P2P endpoint advertised to other nodes.
-	APIEndpoint string // HTTP endpoint advertised inside Docker.
-	ExpiresAt   time.Time
-	outbound    bool
-}
 
 type Server struct {
 	Endpoint           string
@@ -30,20 +17,22 @@ type Server struct {
 	HTTPEndpoint       string
 	NodeID             string
 	Peers              map[string]*Peer
-	PendingRequests    map[string]*JoinRequest
 	lock               sync.RWMutex
 	Contracts          *contract.ContractManager
 	config             *config.ConfigContent
 	configPath         string
+	httpMux            *http.ServeMux
 }
 
 func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
-	return &Server{
-		Endpoint:        endpoint,
-		Peers:           make(map[string]*Peer),
-		PendingRequests: make(map[string]*JoinRequest),
-		Contracts:       contracts,
+	s := &Server{
+		Endpoint:  endpoint,
+		Peers:     make(map[string]*Peer),
+		Contracts: contracts,
+		httpMux:   http.NewServeMux(),
 	}
+	s.registerHTTPEndpoints()
+	return s
 }
 
 // ConfigurePersistence attaches this server to its runtime config.yaml. It is
@@ -82,7 +71,6 @@ func (s *Server) Start() {
 	}
 
 	fmt.Printf("P2P data plane listening on %s (advertised as %s)\n", listenEndpoint, s.Endpoint)
-	go s.StartPeerAPI()
 	go s.connectPersistedPeers()
 
 	for {
@@ -266,26 +254,6 @@ func (s *Server) GetPeerList() []string {
 	}
 
 	return peers
-}
-
-func (s *Server) addPendingRequest(request *JoinRequest) {
-	s.lock.Lock()
-	s.PendingRequests[request.RequestID] = request
-	s.lock.Unlock()
-	time.AfterFunc(time.Until(request.ExpiresAt), func() {
-		s.expirePendingRequest(request.RequestID)
-	})
-}
-func (s *Server) expirePendingRequest(requestID string) {
-	s.lock.Lock()
-	request, ok := s.PendingRequests[requestID]
-	if !ok || time.Now().Before(request.ExpiresAt) {
-		s.lock.Unlock()
-		return
-	}
-	delete(s.PendingRequests, requestID)
-	s.lock.Unlock()
-	fmt.Printf("Join request %s from %s expired\n", requestID, request.Endpoint)
 }
 
 func (s *Server) connectPersistedPeers() {

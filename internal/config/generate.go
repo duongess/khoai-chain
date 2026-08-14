@@ -679,7 +679,7 @@ func main() {
 
 	// 5. Initialize P2P Server
 	// The P2P server handles the core blockchain protocol (block and transaction gossip).
-	srv := p2p.NewServer(conf.P2PListenEndpoint, contractManager)
+	srv := p2p.NewServer(conf.P2PEndpoint, contractManager)
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 

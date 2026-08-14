@@ -113,15 +113,19 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return runCommand("docker", "compose", "-f", composeFile, "logs", "-f", "--tail", "100", nodeToLog)
 	})
 
-	app.AddCommand("join", "Submit an HTTP join request through a P2P bootstrap node", func(args []string) error {
+	app.AddCommand("join", "Connect a source node to a target node", func(args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("invalid command. HTTP node address and bootstrap P2P hostname are required. Example: khoai join localhost:18081 vingroup-hcm:9000")
+			return fmt.Errorf("invalid command. Source and target P2P endpoints are required. Example: khoai join :8080 :8082")
 		}
-		address := args[0]
-		peerAddress := args[1]
-		address = normalizeNodeAddress(address)
-		peerAddress = normalizeNodeAddress(peerAddress)
-		return peerAPI(address, "POST", "/join", map[string]string{"endpoint": address, "bootstrap": peerAddress, "api_endpoint": peerAPIAddress(address)})
+		sourceP2P := normalizeNodeAddress(args[0])
+		targetP2P := normalizeNodeAddress(args[1])
+
+		// The API call goes to the source node's HTTP endpoint.
+		httpEndpoint := p2pToHTTP(sourceP2P)
+
+		fmt.Printf("Sending join request to %s for node %s to connect to %s\n", httpEndpoint, sourceP2P, targetP2P)
+
+		return peerAPI(httpEndpoint, "POST", "/join", map[string]string{"target": targetP2P})
 	})
 
 	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {

@@ -233,10 +233,11 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
-	_, port, err := net.SplitHostPort(node.Endpoint)
+	_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
+	httpPort := "9000"
 
 	// This struct defines the content of the generated runtime config.yaml.
 	// It includes new fields for organization/node info while retaining
@@ -262,10 +263,10 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
-	finalConfig.HTTPListenEndpoint = "0.0.0.0:8080"
-	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:8080", uniqueNodeName)
-	finalConfig.P2PListenEndpoint = "0.0.0.0:9000"
-	finalConfig.P2PEndpoint = fmt.Sprintf("%s:9000", uniqueNodeName)
+	finalConfig.HTTPListenEndpoint = fmt.Sprintf("0.0.0.0:%s", httpPort)
+	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, httpPort)
+	finalConfig.P2PListenEndpoint = fmt.Sprintf("0.0.0.0:%s", p2pPort)
+	finalConfig.P2PEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort)
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -306,15 +307,15 @@ COPY organizations/{{.OrgName}}/contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE 8080 9000
+EXPOSE {{.HTTPPort}} {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeName":      uniqueNodeName,
-		"Port":          port,
+		"HTTPPort":      httpPort,
+		"P2PPort":       p2pPort,
 		"ImageBase":     cfg.Docker.ImageBase,
 		"OrgName":       sanitize(org.DisplayName),
 		"NodeID":        node.ID,
@@ -340,10 +341,11 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 
 	// A. Generate config.yaml for this node (to be included in the Image)
-	_, port, err := net.SplitHostPort(node.Endpoint)
+	_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
+	httpPort := "9000"
 
 	type RuntimeConfigContent struct {
 		NodeName           string            `yaml:"node_name"`
@@ -365,10 +367,10 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 		Organization:       org.DisplayName,
 		NodeID:             node.ID,
 		DisplayName:        node.DisplayName,
-		HTTPListenEndpoint: "0.0.0.0:8080",
-		HTTPEndpoint:       fmt.Sprintf("%s:8080", uniqueNodeName),
-		P2PListenEndpoint:  "0.0.0.0:9000",
-		P2PEndpoint:        fmt.Sprintf("%s:9000", uniqueNodeName),
+		HTTPListenEndpoint: fmt.Sprintf("0.0.0.0:%s", httpPort),
+		HTTPEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, httpPort),
+		P2PListenEndpoint:  fmt.Sprintf("0.0.0.0:%s", p2pPort),
+		P2PEndpoint:        fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -410,15 +412,16 @@ COPY contracts/ ./contracts/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.Port}} 9000
+EXPOSE {{.HTTPPort}} {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeID":        node.ID, // Use NodeID for path
-		"Port":          port,
+		"NodeID":        node.ID,
+		"HTTPPort":      httpPort,
+		"P2PPort":       p2pPort,
 		"ImageBase":     cfg.Docker.ImageBase,
 		"SourceArchive": sourceArchive,
 	}

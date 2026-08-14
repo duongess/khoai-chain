@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -123,12 +124,18 @@ func peerAPI(address, method, path string, body any, out any) error {
 
 // p2pToHTTP converts a P2P endpoint (e.g., "localhost:8080") to its corresponding
 // control plane HTTP endpoint (e.g., "localhost:9000").
+// In our single-host Docker simulation, we map the internal container port 9000
+// to a host port derived from the P2P port (e.g., 8080 -> 18080).
 func p2pToHTTP(p2pEndpoint string) string {
-	// In the current docker-compose setup, the host port for the HTTP control
-	// plane (container port 9000) is mapped to be the same as the P2P port
-	// defined in khoai-config.yaml. Therefore, the HTTP endpoint on the host
-	// is the same as the P2P endpoint.
-	return p2pEndpoint
+	host, p2pPortStr, err := net.SplitHostPort(p2pEndpoint)
+	if err != nil {
+		// Fallback for addresses without host, e.g., ":8080"
+		host = "localhost"
+		p2pPortStr = strings.TrimPrefix(p2pEndpoint, ":")
+	}
+	p2pPort, _ := strconv.Atoi(p2pPortStr)
+	httpPort := p2pPort + 10000
+	return net.JoinHostPort(host, fmt.Sprintf("%d", httpPort))
 }
 
 // findNodeInternalAddressByEndpoint finds a node by its host-facing endpoint (e.g., "localhost:8082")

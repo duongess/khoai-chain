@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -457,25 +458,30 @@ func sourceArchiveFromVersionFile(versionFile string) (string, error) {
 func GenerateDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	// We need to create a flat list of nodes for the template.
 	type ComposeNodeInfo struct {
-		Name    string // unique name: vingroup-hn
-		OrgName string // sanitized org name: vingroup
-		NodeID  string // node id: hn
-		Port    string
+		Name     string // unique name: vingroup-hn
+		OrgName  string // sanitized org name: vingroup
+		NodeID   string // node id: hn
+		P2PPort  string // e.g., 8080
+		HTTPPort string // e.g., 18080
 	}
 	var allNodes []ComposeNodeInfo
 
 	for _, org := range cfg.Organizations {
 		sanitizedOrgName := sanitize(org.DisplayName)
 		for _, node := range org.Nodes {
-			_, port, err := net.SplitHostPort(node.Endpoint)
+			_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 			if err != nil {
 				return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 			}
+			p2pPortInt, _ := strconv.Atoi(p2pPort)
+			httpPort := p2pPortInt + 10000
+
 			allNodes = append(allNodes, ComposeNodeInfo{
-				Name:    fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-				OrgName: sanitizedOrgName,
-				NodeID:  node.ID,
-				Port:    port,
+				Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+				OrgName:  sanitizedOrgName,
+				NodeID:   node.ID,
+				P2PPort:  p2pPort,
+				HTTPPort: fmt.Sprintf("%d", httpPort),
 			})
 		}
 	}
@@ -510,9 +516,11 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.Port}}:9000"
+      - "{{.P2PPort}}:{{.P2PPort}}"
+      - "{{.HTTPPort}}:9000"
     expose:
-      - "{{.Port}}"
+      - "{{.P2PPort}}"
+      - "9000"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
@@ -533,9 +541,10 @@ services:
 // GenerateWorkspaceDockerCompose creates a docker-compose.yaml file for a single organization workspace.
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
-		Name   string // unique name: vingroup-hn
-		NodeID string // node id: hn
-		Port   string
+		Name     string // unique name: vingroup-hn
+		NodeID   string // node id: hn
+		P2PPort  string // e.g., 8080
+		HTTPPort string // e.g., 18080
 	}
 	var allNodes []ComposeNodeInfo
 
@@ -543,14 +552,18 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	org := cfg.Organizations[0]
 	sanitizedOrgName := sanitize(org.DisplayName)
 	for _, node := range org.Nodes {
-		_, port, err := net.SplitHostPort(node.Endpoint)
+		_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 		if err != nil {
 			return fmt.Errorf("invalid endpoint for node %s-%s: %v", org.DisplayName, node.ID, err)
 		}
+		p2pPortInt, _ := strconv.Atoi(p2pPort)
+		httpPort := p2pPortInt + 10000
+
 		allNodes = append(allNodes, ComposeNodeInfo{
-			Name:   fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
-			NodeID: node.ID,
-			Port:   port,
+			Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			NodeID:   node.ID,
+			P2PPort:  p2pPort,
+			HTTPPort: fmt.Sprintf("%d", httpPort),
 		})
 	}
 
@@ -583,9 +596,11 @@ services:
     image: {{$.Registry}}/{{.Name}}:{{$.ImageTag}}
     container_name: {{.Name}}
     ports:
-      - "{{.Port}}:9000"
+      - "{{.P2PPort}}:{{.P2PPort}}"
+      - "{{.HTTPPort}}:9000"
     expose:
-      - "{{.Port}}"
+      - "{{.P2PPort}}"
+      - "9000"
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config

@@ -129,7 +129,8 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		// The API call goes to the TARGET node's HTTP endpoint.
 		httpEndpoint := p2pToHTTP(targetP2P_onHost)
 
-		fmt.Printf("Sending join request to %s for node %s to be allowed to join\n", httpEndpoint, sourceP2P_inDocker)
+		fmt.Printf("Contacting TARGET node's control plane (%s)\n", httpEndpoint)
+		fmt.Printf(" > Requesting that SOURCE node (%s) be allowed to join.\n", sourceP2P_inDocker)
 
 		err = peerAPI(httpEndpoint, "POST", "/join", map[string]string{"source_endpoint": sourceP2P_inDocker}, nil)
 		if err != nil {
@@ -144,15 +145,16 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		if len(args) < 1 {
 			return fmt.Errorf("invalid command. Target node address is required. Example: khoai requests :8082")
 		}
-		targetNode := normalizeNodeAddress(args[0])
-		return peerAPI(targetNode, "GET", "/join-requests", nil, nil)
+		targetP2P := normalizeNodeAddress(args[0])
+		targetHTTP := p2pToHTTP(targetP2P)
+		return peerAPI(targetHTTP, "GET", "/join-requests", nil, nil)
 	})
 
 	app.AddCommand("approve", "Approve a pending join request from a source node on a target node", func(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("invalid command. Target and source node addresses are required. Example: khoai approve :8082 :8080")
 		}
-		targetNode := normalizeNodeAddress(args[0])
+		targetP2P := normalizeNodeAddress(args[0])
 		sourceNode_onHost := normalizeNodeAddress(args[1])
 
 		sourceNode_inDocker, err := findNodeInternalAddressByEndpoint(configPath, sourceNode_onHost)
@@ -160,33 +162,41 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 			return fmt.Errorf("could not resolve source endpoint %s: %w", sourceNode_onHost, err)
 		}
 
-		fmt.Printf("Sending approval to node %s for source node %s to join...\n", targetNode, sourceNode_inDocker)
-		return peerAPI(targetNode, "POST", "/approve", map[string]string{"source_endpoint": sourceNode_inDocker}, nil)
+		targetHTTP := p2pToHTTP(targetP2P)
+
+		fmt.Printf("Sending approval to node at %s for source node %s to join...\n", targetHTTP, sourceNode_inDocker)
+		return peerAPI(targetHTTP, "POST", "/approve", map[string]string{"source_endpoint": sourceNode_inDocker}, nil)
 	})
 
 	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("invalid command. Node address is required. Example: khoai leave localhost:8080")
 		}
-		address := args[0]
-		address = normalizeNodeAddress(address)
-		return peerAPI(address, "POST", "/leave", nil, nil)
+		p2pAddress := normalizeNodeAddress(args[0])
+		httpAddress := p2pToHTTP(p2pAddress)
+		return peerAPI(httpAddress, "POST", "/leave", nil, nil)
 	})
 
 	app.AddCommand("remove-peer", "Remove a peer through the HTTP control API", func(args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("invalid command. HTTP node address and P2P peer endpoint are required. Example: khoai remove-peer localhost:8080 localhost:8081")
+			return fmt.Errorf("invalid command. Target node's P2P address and peer's P2P address are required. Example: khoai remove-peer :8080 :8081")
 		}
-		return peerAPI(normalizeNodeAddress(args[0]), "POST", "/peers/remove", map[string]string{"endpoint": args[1]}, nil)
+		targetHTTP := p2pToHTTP(normalizeNodeAddress(args[0]))
+		// The body of the request needs the internal P2P address of the peer to remove.
+		peerToRemove_inDocker, err := findNodeInternalAddressByEndpoint(configPath, normalizeNodeAddress(args[1]))
+		if err != nil {
+			return fmt.Errorf("could not resolve peer to remove endpoint %s: %w", args[1], err)
+		}
+		return peerAPI(targetHTTP, "POST", "/peers/remove", map[string]string{"endpoint": peerToRemove_inDocker}, nil)
 	})
 
 	app.AddCommand("peers", "List peers through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("invalid command. Node address is required. Example: khoai peers localhost:8080")
 		}
-		address := args[0]
-		address = normalizeNodeAddress(address)
-		return peerAPI(address, "GET", "/peers", nil, nil)
+		p2pAddress := normalizeNodeAddress(args[0])
+		httpAddress := p2pToHTTP(p2pAddress)
+		return peerAPI(httpAddress, "GET", "/peers", nil, nil)
 	})
 }
 

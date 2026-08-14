@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"khoai-chain/internal/config"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -118,10 +117,9 @@ func peerAPI(address, method, path string, body any) error {
 // p2pToHTTP converts a P2P endpoint (e.g., "localhost:8080") to its corresponding
 // control plane HTTP endpoint (e.g., "localhost:9000").
 func p2pToHTTP(p2pEndpoint string) string {
-	host, _, err := net.SplitHostPort(p2pEndpoint)
-	if err != nil {
-		// Handles cases like "localhost" or "vingroup-hn" where port is omitted
-		return net.JoinHostPort(p2pEndpoint, "9000")
-	}
-	return net.JoinHostPort(host, "9000")
+	// In the current docker-compose setup, the host port for the HTTP control
+	// plane (container port 9000) is mapped to be the same as the P2P port
+	// defined in khoai-config.yaml. Therefore, the HTTP endpoint on the host
+	// is the same as the P2P endpoint.
+	return p2pEndpoint
 }

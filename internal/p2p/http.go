@@ -5,12 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"khoai-chain/internal/config"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // This method sets up the HTTP routes for the node's control plane.
@@ -65,21 +63,14 @@ func (s *Server) handleCreateJoinRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	id, err := requestID()
-	if err != nil {
-		http.Error(w, "could not generate request ID", http.StatusInternalServerError)
-		return
-	}
+	sourceEndpoint := body.SourceEndpoint
+	s.addPendingJoin(sourceEndpoint)
 
-	req := &JoinRequest{
-		RequestID:      id,
-		SourceEndpoint: body.SourceEndpoint,
-		ExpiresAt:      time.Now().Add(config.JoinRequestTTL),
-	}
-	s.addPendingRequest(req)
-
-	fmt.Printf("Received join request from %s. Request ID: %s\n", req.SourceEndpoint, req.RequestID)
-	writeJSON(w, http.StatusAccepted, req)
+	fmt.Printf("Received join request from %s. It can be approved by an admin.\n", sourceEndpoint)
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "request_pending",
+		"detail": fmt.Sprintf("Join request from %s is waiting for approval.", sourceEndpoint),
+	})
 }
 
 func (s *Server) handleListJoinRequests(w http.ResponseWriter, r *http.Request) {
@@ -89,11 +80,11 @@ func (s *Server) handleListJoinRequests(w http.ResponseWriter, r *http.Request) 
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	requests := make([]*JoinRequest, 0, len(s.PendingRequests))
-	for _, req := range s.PendingRequests {
-		requests = append(requests, req)
+	pendingEndpoints := make([]string, 0, len(s.PendingJoins))
+	for endpoint := range s.PendingJoins {
+		pendingEndpoints = append(pendingEndpoints, endpoint)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"join_requests": requests})
+	writeJSON(w, http.StatusOK, map[string]any{"pending_joins": pendingEndpoints})
 }
 
 // handleApproveJoin finalizes a connection from a pending request.
@@ -104,23 +95,22 @@ func (s *Server) handleApproveJoin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		RequestID string `json:"request_id"`
+		SourceEndpoint string `json:"source_endpoint"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RequestID == "" {
-		http.Error(w, "request_id is required", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.SourceEndpoint == "" {
+		http.Error(w, "source_endpoint is required", http.StatusBadRequest)
 		return
 	}
 
-	req, ok := s.takePendingRequest(body.RequestID)
-	if !ok {
+	sourceEndpoint := body.SourceEndpoint
+	if !s.approvePendingJoin(sourceEndpoint) {
 		http.Error(w, "join request not found or expired", http.StatusNotFound)
 		return
 	}
 
-	sourceEndpoint := req.SourceEndpoint
 	targetEndpoint := s.Endpoint
 
-	fmt.Printf("Approving join request %s: this node (%s) will connect to %s\n", req.RequestID, targetEndpoint, sourceEndpoint)
+	fmt.Printf("Approving join request from %s: this node (%s) will connect to it.\n", sourceEndpoint, targetEndpoint)
 
 	// 1. Connect to the source and persist it.
 	go s.ConnectToPeer(sourceEndpoint)

@@ -131,16 +131,12 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 
 		fmt.Printf("Sending join request to %s for node %s to be allowed to join\n", httpEndpoint, sourceP2P_inDocker)
 
-		var resp struct {
-			RequestID string `json:"request_id"`
-		}
-		err = peerAPI(httpEndpoint, "POST", "/join", map[string]string{"source_endpoint": sourceP2P_inDocker}, &resp)
+		err = peerAPI(httpEndpoint, "POST", "/join", map[string]string{"source_endpoint": sourceP2P_inDocker}, nil)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("\nJoin request sent successfully.\n")
-		fmt.Printf("Request ID: %s\n", resp.RequestID)
-		fmt.Printf("To approve, run: khoai approve %s %s\n", targetP2P_onHost, resp.RequestID)
+		fmt.Printf("To approve this request, run: khoai approve %s %s\n", targetP2P_onHost, sourceP2P_onHost)
 		return nil
 	})
 
@@ -152,15 +148,20 @@ func registerNodeCommands(app *cli.CLI, configPath string) {
 		return peerAPI(targetNode, "GET", "/join-requests", nil, nil)
 	})
 
-	app.AddCommand("approve", "Approve a pending join request on a target node", func(args []string) error {
+	app.AddCommand("approve", "Approve a pending join request from a source node on a target node", func(args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("invalid command. Target node address and request ID are required. Example: khoai approve :8082 <request_id>")
+			return fmt.Errorf("invalid command. Target and source node addresses are required. Example: khoai approve :8082 :8080")
 		}
 		targetNode := normalizeNodeAddress(args[0])
-		requestID := args[1]
+		sourceNode_onHost := normalizeNodeAddress(args[1])
 
-		fmt.Printf("Sending approval for request %s to node %s...\n", requestID, targetNode)
-		return peerAPI(targetNode, "POST", "/approve", map[string]string{"request_id": requestID}, nil)
+		sourceNode_inDocker, err := findNodeInternalAddressByEndpoint(configPath, sourceNode_onHost)
+		if err != nil {
+			return fmt.Errorf("could not resolve source endpoint %s: %w", sourceNode_onHost, err)
+		}
+
+		fmt.Printf("Sending approval to node %s for source node %s to join...\n", targetNode, sourceNode_inDocker)
+		return peerAPI(targetNode, "POST", "/approve", map[string]string{"source_endpoint": sourceNode_inDocker}, nil)
 	})
 
 	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {

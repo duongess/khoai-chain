@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -123,19 +124,45 @@ func peerAPI(address, method, path string, body any, out any) error {
 
 // p2pToHTTP converts a P2P endpoint (e.g., "localhost:8080") to its corresponding
 // control plane HTTP endpoint (e.g., "localhost:9000").
-// The control plane for a node is assumed to be exposed on port 9000 on the host.
+// In our single-host Docker simulation, we map the internal container port 9000
+// to a host port derived from the P2P port (e.g., 8080 -> 18080).
 func p2pToHTTP(p2pEndpoint string) string {
-	host, _, err := net.SplitHostPort(p2pEndpoint)
+	p2pEndpoint = strings.TrimSpace(p2pEndpoint)
+
+	// Case 1: endpoint chỉ có host, không có port.
+	// Example: "node.example.com" -> "node.example.com:9000"
+	if !strings.Contains(p2pEndpoint, ":") {
+		return net.JoinHostPort(p2pEndpoint, "9000")
+	}
+
+	host, p2pPortStr, err := net.SplitHostPort(p2pEndpoint)
 	if err != nil {
-		// This can happen for invalid formats.
-		// For an address like ":8080", SplitHostPort returns host="", port="8080", err=nil.
-		// We default to localhost for any case where the host is not explicit.
-		host = "localhost"
+		// Fallback for endpoints like ":8080"
+		if strings.HasPrefix(p2pEndpoint, ":") {
+			host = "localhost"
+			p2pPortStr = strings.TrimPrefix(p2pEndpoint, ":")
+		} else {
+			// Invalid endpoint; fallback to localhost:9000
+			return "localhost:9000"
+		}
 	}
+
+	// Case 2: no host or bind address is 0.0.0.0.
+	// This is the local Docker/single-host simulation case.
+	// Keep the existing convention: HTTP port = P2P port + 10000.
 	if host == "" || host == "0.0.0.0" {
-		host = "localhost"
+		p2pPort, err := strconv.Atoi(p2pPortStr)
+		if err != nil {
+			return "localhost:9000"
+		}
+
+		httpPort := p2pPort + 10000
+		return net.JoinHostPort("localhost", strconv.Itoa(httpPort))
 	}
-	// The control plane HTTP port is always 9000.
+
+	// Case 3: real hostname/IP.
+	// P2P port and HTTP port are independent.
+	// HTTP Control Plane always uses port 9000.
 	return net.JoinHostPort(host, "9000")
 }
 

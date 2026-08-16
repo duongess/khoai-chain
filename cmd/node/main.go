@@ -13,7 +13,6 @@ import (
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
-	"khoai-chain/internal/p2p"
 	"khoai-chain/pkg/cli"
 )
 

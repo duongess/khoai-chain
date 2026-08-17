@@ -96,27 +96,22 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 	})
 
 	app.AddCommand("update u", "update version of khoai source code and rebuild artifacts for all nodes in the workspace", func(args []string) error {
-		isWorkspace, err := isWorkspaceContext()
+		isArtifacts, err := isArtifacts()
 		if err != nil {
 			return err
 		}
-		if !isWorkspace {
-			return fmt.Errorf("the 'update' command can only be run inside an initialized workspace (missing organization.yaml)")
+		var version string
+		if isArtifacts {
+			version, err = downloadViaScript("latest", "./build")
+		} else {
+			version, err = downloadViaScript("latest", ".")
 		}
 
 		fmt.Println("Updating Khoai source code to the latest version...")
-		version, err := downloadViaScript("latest", ".")
 		if err != nil {
 			return fmt.Errorf("failed to download source code: %w", err)
 		}
 		fmt.Printf("Successfully updated to version %s.\n", version)
-
-		fmt.Println("Rebuilding node artifacts in workspace...")
-		nodesGenerated, err := generateWorkspaceNodeArtifacts(true)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Successfully rebuilt artifacts for %d node(s).\n", nodesGenerated)
 		return nil
 	})
 }

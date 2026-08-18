@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -13,7 +14,6 @@ import (
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/server"
-	"khoai-chain/pkg/cli"
 
 	{{range .Imports}}	"{{.}}"
 	{{end}}
@@ -29,8 +29,6 @@ func main() {
 	// Parse flags to get the config path
 	configPathFlag := flag.String("config", defaultConfigPath, "Path to the configuration file")
 	flag.Parse()
-
-	nodeCLI := cli.NewCLI()
 
 	// 1. Load Config
 	conf, err := config.LoadConfig(*configPathFlag)
@@ -66,11 +64,18 @@ func main() {
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 	// 5. Initialize P2P Server
-	srv := p2p.NewServer(conf.Endpoint, contractManager)
+	// The P2P server handles the core blockchain protocol (block and transaction gossip).
+	srv := server.NewServer(conf.P2PEndpoint, contractManager)
+	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 6. Block main thread to keep the server running forever
-	select {}
+	// 6. Initialize HTTP Control Plane
+	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
+	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
+	go func() {
+		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
+	}()
 
-	nodeCLI.Run()
+	// 7. Block main thread to keep the server running forever
+	select {}
 }

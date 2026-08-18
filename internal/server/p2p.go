@@ -43,6 +43,8 @@ func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 // stored here, only accepted peers are.
 func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath string) {
 	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	s.config = conf
 	s.configPath = configPath
 	if conf != nil {
@@ -60,7 +62,6 @@ func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath str
 			s.HTTPEndpoint = conf.HTTPEndpoint
 		}
 	}
-	s.lock.Unlock()
 }
 
 func (s *Server) Start() {
@@ -116,7 +117,9 @@ func (s *Server) ConnectToPeer(address string) {
 		fmt.Printf("Can't connect to %s: %v\n", address, err)
 		return
 	}
-	s.addPeer(conn, address)
+
+	peer := s.addPeer(conn)
+
 	fmt.Println("Sending initial sync request...")
 	if s.Contracts == nil || s.Contracts.Chain == nil {
 		return
@@ -127,19 +130,24 @@ func (s *Server) ConnectToPeer(address string) {
 		Sender: s.Endpoint,
 		Hashes: hashes,
 	}
-	reqBytes, _ := json.Marshal(req)
-	conn.Write(append(reqBytes, '\n'))
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		fmt.Printf("Failed to marshal sync request for %s: %v\n", address, err)
+		s.DisconnectToPeer(address) // Clean up the failed connection.
+		return
+	}
 
+	if err := peer.Send(append(reqBytes, '\n')); err != nil {
+		fmt.Printf("Failed to send sync request to %s: %v\n", address, err)
+		// The peer's ReadLoop will likely handle the disconnection.
+	}
 }
 
-func (s *Server) AddPeer(conn net.Conn) {
-	s.addPeer(conn, conn.RemoteAddr().String())
-}
-
-func (s *Server) addPeer(conn net.Conn, endpoint string) {
+func (s *Server) addPeer(conn net.Conn) *Peer {
 	peer := NewPeer(conn, s.Contracts)
-	peer.Endpoint = endpoint
+	peer.Endpoint = conn.RemoteAddr().String()
 	s.addPeerObject(peer)
+	return peer
 }
 
 func (s *Server) addPeerObject(peer *Peer) {

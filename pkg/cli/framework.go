@@ -24,12 +24,14 @@ type Command struct {
 }
 
 type CLI struct {
-	Groups map[string]*Group
+	Groups     map[string]*Group
+	GroupOrder []string
 }
 
 func NewCLI() *CLI {
 	return &CLI{
-		Groups: make(map[string]*Group),
+		Groups:     make(map[string]*Group),
+		GroupOrder: []string{},
 	}
 }
 
@@ -54,6 +56,7 @@ func (c *CLI) AddCommand(nameStr string, desc string, handler CommandHandler, gr
 			Description: strings.Join(groupDesc, " "),
 			Commands:    []*Command{},
 		}
+		c.GroupOrder = append(c.GroupOrder, groupName)
 	}
 
 	c.Groups[groupName].Commands = append(c.Groups[groupName].Commands, cmd)
@@ -65,50 +68,45 @@ func (c *CLI) PrintHelp() {
 	fmt.Println("Usage: khoai [command] [flags]")
 	fmt.Println("\nAvailable Commands:")
 
-	var uniqueCmds []*Command
-	printed := make(map[*Command]bool)
-
+	// First pass: find maximum length for command names and aliases for alignment
 	maxNameLen := 0
 	maxAliasLen := 0
-
-	for _, group := range c.Groups {
-		fmt.Println(group.Name)
-		fmt.Println(group.Description)
+	for _, groupName := range c.GroupOrder {
+		group := c.Groups[groupName]
 		for _, cmd := range group.Commands {
-			if printed[cmd] {
-				continue
-			}
-			printed[cmd] = true
-			uniqueCmds = append(uniqueCmds, cmd)
-
 			if len(cmd.Names) > 0 {
 				if len(cmd.Names[0]) > maxNameLen {
 					maxNameLen = len(cmd.Names[0])
 				}
 			}
-
 			if len(cmd.Names) > 1 {
 				if len(cmd.Names[1]) > maxAliasLen {
 					maxAliasLen = len(cmd.Names[1])
 				}
 			}
 		}
+	}
 
-		maxNameLen += 4
-		maxAliasLen += 4
-
-		for _, cmd := range uniqueCmds {
+	// Second pass: print commands, grouped and aligned
+	for _, groupName := range c.GroupOrder {
+		group := c.Groups[groupName]
+		fmt.Println()
+		fmt.Println(group.Name)
+		if group.Description != "" {
+			fmt.Println(group.Description)
+		}
+		for _, cmd := range group.Commands {
 			name := ""
 			alias := ""
-
 			if len(cmd.Names) > 0 {
 				name = cmd.Names[0]
 			}
 			if len(cmd.Names) > 1 {
 				alias = cmd.Names[1]
 			}
-
-			fmt.Printf("  %-*s%-*s%s\n", maxNameLen, name, maxAliasLen, alias, cmd.Description)
+			// Use maxNameLen and maxAliasLen for padding to ensure alignment
+			// Add extra spaces for readability between columns
+			fmt.Printf("  %-*s  %-*s  %s\n", maxNameLen, name, maxAliasLen, alias, cmd.Description)
 		}
 	}
 	fmt.Println("\nDefault:")
@@ -147,12 +145,14 @@ func (c *CLI) Run() {
 	// 2. Nếu là lệnh cụ thể (VD: khoai help, khoai version)
 	for _, group := range c.Groups {
 		for _, cmd := range group.Commands {
-			if cmd.Names[0] == arg {
-				if err := cmd.Handler(os.Args[2:]); err != nil {
-					fmt.Println("❌ Error:", err)
-					os.Exit(1)
+			for _, name := range cmd.Names {
+				if name == arg {
+					if err := cmd.Handler(os.Args[2:]); err != nil {
+						fmt.Println("❌ Error:", err)
+						os.Exit(1)
+					}
+					return
 				}
-				return
 			}
 		}
 	}

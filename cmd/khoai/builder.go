@@ -35,6 +35,7 @@ func main() {
 	registerWorkspaceCommands(app, configPath)
 	registerOrgCommands(app, configPath)
 	registerNodeCommands(app, configPath)
+	registerPeerCommands(app, configPath)
 
 	app.Run()
 }

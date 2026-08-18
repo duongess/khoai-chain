@@ -6,7 +6,7 @@ import (
 )
 
 // registerPeerCommands đăng ký các lệnh tương tác với peer.
-func registerPeerCommands(app *cli.CLI, configPath string) {
+func registerPeerCommands(app *cli.CLI, configPath string, groupName string) {
 	app.AddCommand("join", "Request for a source node to join a target node", func(args []string) error {
 		if len(args) < 2 {
 			return fmt.Errorf("invalid command. Source and target P2P endpoints are required. Example: khoai join :8080 :8082")
@@ -33,7 +33,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 		fmt.Printf("\nJoin request sent successfully.\n")
 		fmt.Printf("To approve this request, run: khoai approve %s %s\n", targetP2P_onHost, sourceP2P_onHost)
 		return nil
-	})
+	}, groupName)
 
 	app.AddCommand("requests", "List pending join requests on a node", func(args []string) error {
 		if len(args) < 1 {
@@ -42,7 +42,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 		targetP2P := normalizeNodeAddress(args[0])
 		targetHTTP := p2pToHTTP(targetP2P)
 		return peerAPI(targetHTTP, "GET", "/join-requests", nil, nil)
-	})
+	}, groupName)
 
 	app.AddCommand("approve", "Approve a pending join request from a source node on a target node", func(args []string) error {
 		if len(args) < 2 {
@@ -60,7 +60,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 
 		fmt.Printf("Sending approval to node at %s for source node %s to join...\n", targetHTTP, sourceNode_inDocker)
 		return peerAPI(targetHTTP, "POST", "/approve", map[string]string{"source_endpoint": sourceNode_inDocker}, nil)
-	})
+	}, groupName)
 
 	app.AddCommand("leave", "Leave through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
@@ -69,7 +69,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 		p2pAddress := normalizeNodeAddress(args[0])
 		httpAddress := p2pToHTTP(p2pAddress)
 		return peerAPI(httpAddress, "POST", "/leave", nil, nil)
-	})
+	}, groupName)
 
 	app.AddCommand("remove-peer", "Remove a peer through the HTTP control API", func(args []string) error {
 		if len(args) < 2 {
@@ -82,7 +82,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 			return fmt.Errorf("could not resolve peer to remove endpoint %s: %w", args[1], err)
 		}
 		return peerAPI(targetHTTP, "POST", "/peers/remove", map[string]string{"endpoint": peerToRemove_inDocker}, nil)
-	})
+	}, groupName)
 
 	app.AddCommand("peers", "List peers through the node HTTP control API", func(args []string) error {
 		if len(args) < 1 {
@@ -91,7 +91,7 @@ func registerPeerCommands(app *cli.CLI, configPath string) {
 		p2pAddress := normalizeNodeAddress(args[0])
 		httpAddress := p2pToHTTP(p2pAddress)
 		return peerAPI(httpAddress, "GET", "/peers", nil, nil)
-	})
+	}, groupName)
 }
 
 func normalizeNodeAddress(address string) string {

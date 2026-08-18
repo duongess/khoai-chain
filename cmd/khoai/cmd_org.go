@@ -13,7 +13,7 @@ import (
 )
 
 // registerOrgCommands đăng ký các lệnh liên quan đến tổ chức như 'org', 'package', 'install'.
-func registerOrgCommands(app *cli.CLI, configPath string) {
+func registerOrgCommands(app *cli.CLI, configPath string, groupName string) {
 	// Lệnh 'org' để quản lý tổ chức.
 	app.AddCommand("org", "Manage organizations", func(args []string) error {
 		if len(args) < 2 || args[0] != "package" {
@@ -27,7 +27,7 @@ func registerOrgCommands(app *cli.CLI, configPath string) {
 		default:
 			return fmt.Errorf("unknown org command: %s", action)
 		}
-	})
+	}, groupName)
 
 	// Lệnh 'package' (shortcut) để đóng gói một tổ chức.
 	app.AddCommand("package", "Package an organization (e.g., package org <name>)", func(args []string) error {
@@ -35,7 +35,7 @@ func registerOrgCommands(app *cli.CLI, configPath string) {
 			return fmt.Errorf("invalid command. Use 'package org <name>'")
 		}
 		return packageOrganization(args[1], configPath)
-	})
+	}, groupName)
 
 	// Lệnh 'install' để cài đặt một tổ chức từ file package.
 	app.AddCommand("install", "Install an organization from a package file", func(args []string) error {
@@ -44,7 +44,7 @@ func registerOrgCommands(app *cli.CLI, configPath string) {
 		}
 		packagePath := args[0]
 		return installOrganization(packagePath)
-	})
+	}, groupName)
 }
 
 // packageOrganization tạo một file lưu trữ .tar.gz của một tổ chức đã được tạo.

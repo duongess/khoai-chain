@@ -11,7 +11,7 @@ import (
 )
 
 // registerWorkspaceCommands đăng ký các lệnh liên quan đến workspace như 'init' và 'build'.
-func registerWorkspaceCommands(app *cli.CLI, configPath string) {
+func registerWorkspaceCommands(app *cli.CLI, configPath string, groupName string) {
 
 	app.AddCommand("generate gen", "Download source and generate mess", func(args []string) error {
 		// 1. Download source code
@@ -31,7 +31,7 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 		fmt.Println("- To start all nodes: khoai start all")
 		fmt.Println("- To start a single node: khoai start <node_name>")
 		return nil
-	})
+	}, groupName)
 
 	// Lệnh 'init' để khởi tạo một workspace mới.
 	app.AddCommand("init i", "Initializes the current directory as a new Khoai organization workspace", func(args []string) error {
@@ -68,7 +68,7 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 		cwd, _ := os.Getwd()
 		fmt.Printf("Successfully initialized workspace for organization '%s'.\n", filepath.Base(cwd))
 		return nil
-	})
+	}, groupName)
 
 	// Lệnh 'build' để tạo các artifacts cho node trong workspace.
 	app.AddCommand("build b", "Generate artifacts for new nodes in the workspace", func(args []string) error {
@@ -93,32 +93,27 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string) {
 			fmt.Println("\nAll nodes are up-to-date. No new artifacts were generated.")
 		}
 		return nil
-	})
+	}, groupName)
 
 	app.AddCommand("update u", "update version of khoai source code and rebuild artifacts for all nodes in the workspace", func(args []string) error {
-		isWorkspace, err := isWorkspaceContext()
+		isArtifacts, err := isArtifacts()
 		if err != nil {
 			return err
 		}
-		if !isWorkspace {
-			return fmt.Errorf("the 'update' command can only be run inside an initialized workspace (missing organization.yaml)")
+		var version string
+		if isArtifacts {
+			version, err = downloadViaScript("latest", "./build")
+		} else {
+			version, err = downloadViaScript("latest", ".")
 		}
 
 		fmt.Println("Updating Khoai source code to the latest version...")
-		version, err := downloadViaScript("latest", ".")
 		if err != nil {
 			return fmt.Errorf("failed to download source code: %w", err)
 		}
 		fmt.Printf("Successfully updated to version %s.\n", version)
-
-		fmt.Println("Rebuilding node artifacts in workspace...")
-		nodesGenerated, err := generateWorkspaceNodeArtifacts(true)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Successfully rebuilt artifacts for %d node(s).\n", nodesGenerated)
 		return nil
-	})
+	}, groupName)
 }
 
 func generateWorkspaceNodeArtifacts(force bool) (int, error) {

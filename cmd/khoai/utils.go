@@ -45,6 +45,26 @@ func generateArtifacts(configPath string) error {
 	return nil
 }
 
+func isArtifacts() (bool, error) {
+	if _, err := os.Stat("khoai-config.yaml"); err == nil {
+		builderConf, err := config.LoadBuilderConfig("khoai-config.yaml")
+		if err != nil {
+			return false, fmt.Errorf("error loading builder config: %w", err)
+		}
+		if len(builderConf.Organizations) == 0 {
+			fmt.Println("No organizations defined in khoai-config.yaml. Please define at least one organization.")
+			return false, nil
+		}
+		return true, nil
+	} else if os.IsNotExist(err) {
+		fmt.Println("No khoai-config.yaml found in the current directory. Please run this command in a valid workspace.")
+		return false, nil
+	} else {
+		fmt.Println("Error checking for khoai-config.yaml:", err)
+		return false, err
+	}
+}
+
 // downloadViaScript xử lý việc tải và giải nén mã nguồn từ GitHub.
 func downloadViaScript(version string, targetDir string) (string, error) {
 	fmt.Printf("Starting process to download source code version: %s\n", version)

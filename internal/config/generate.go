@@ -231,6 +231,27 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 		return err
 	}
 
+	// Collect all peer endpoints from the main builder config
+	var allPeerEndpoints []string
+	for _, otherOrg := range cfg.Organizations {
+		for _, otherNode := range otherOrg.Nodes {
+			// Don't add the current node to its own peer list
+			if otherNode.ID == node.ID && otherOrg.DisplayName == org.DisplayName {
+				continue
+			}
+
+			// Construct the internal Docker endpoint for this peer
+			_, peerP2PPort, err := net.SplitHostPort(otherNode.Endpoint)
+			if err != nil {
+				// This should have been caught by validation, but good to be safe
+				return fmt.Errorf("invalid endpoint for peer %s-%s: %v", otherOrg.DisplayName, otherNode.ID, err)
+			}
+			peerUniqueName := fmt.Sprintf("%s-%s", sanitize(otherOrg.DisplayName), otherNode.ID)
+			peerEndpoint := fmt.Sprintf("%s:%s", peerUniqueName, peerP2PPort)
+			allPeerEndpoints = append(allPeerEndpoints, peerEndpoint)
+		}
+	}
+
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
@@ -254,12 +275,14 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 		HTTPEndpoint       string            `yaml:"http_endpoint"`
 		P2PListenEndpoint  string            `yaml:"p2p_listen"`
 		P2PEndpoint        string            `yaml:"p2p_endpoint"`
+		Peers              []string          `yaml:"peers,omitempty"`
 	}
 
 	finalConfig := RuntimeConfigContent{
 		NodeName:   uniqueNodeName,
 		DBPath:     "/app/data",
 		Chaincodes: org.Chaincodes, // Contracts are inherited from the organization
+		Peers:      allPeerEndpoints,
 	}
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
@@ -691,13 +714,12 @@ func main() {
 
 	// 5. Initialize P2P Server
 	// The P2P server handles the core blockchain protocol (block and transaction gossip).
-	srv := p2p.NewServer(conf.P2PEndpoint, contractManager)
+	srv := server.NewServer(conf.P2PEndpoint, contractManager)
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
 	// 6. Initialize HTTP Control Plane
 	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
-	// We assume the 'p2p.Server' struct also implements http.Handler to serve these requests.
 	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
 	go func() {
 		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)

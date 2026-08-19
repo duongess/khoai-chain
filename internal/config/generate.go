@@ -354,7 +354,9 @@ COPY dist/{{.SourceArchive}} ./src.zip
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
 
-# Tai thu vien phu thuoc cho du an
+# Chuyen go get thanh RUN de cap nhat SDK trong qua trinh build image
+RUN go get github.com/duongess/khoaichain-sdk@latest
+RUN go mod tidy
 RUN go mod download
 
 # Goi truc tiep den organizations/ tu build context

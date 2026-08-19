@@ -13,7 +13,7 @@ require (
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
-	github.com/duongess/khoaichain-sdk v0.4.0-beta.1
+	github.com/duongess/khoaichain-sdk v0.4.2-beta
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect

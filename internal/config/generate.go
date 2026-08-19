@@ -47,8 +47,10 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 
 // BuilderConfig is the root configuration structure from khoai-config.yaml
 type BuilderConfig struct {
-	Network       *NetworkConfig       `yaml:"network,omitempty"`
-	Docker        *DockerConfig        `yaml:"docker,omitempty"`
+	Network *NetworkConfig `yaml:"network,omitempty"`
+	Docker  *DockerConfig  `yaml:"docker,omitempty"`
+	// Permissions defines roles that can be used for access control in chaincodes.
+	Permissions   []PermissionConfig   `yaml:"permissions,omitempty"`
 	Chaincodes    []ChaincodeConfig    `yaml:"chaincodes,omitempty"`
 	Organizations []OrganizationConfig `yaml:"organizations"`
 }
@@ -88,8 +90,15 @@ type RuntimeNodeConfig struct {
 
 // ChaincodeConfig defines a smart contract.
 type ChaincodeConfig struct {
-	Name string `yaml:"name,omitempty"`
-	Path string `yaml:"path,omitempty"`
+	ID      string `yaml:"id,omitempty"`
+	Path    string `yaml:"path,omitempty"`
+	Version string `yaml:"version,omitempty"`
+}
+
+// PermissionConfig defines a role for access control.
+type PermissionConfig struct {
+	ID          string `yaml:"id"`
+	Description string `yaml:"description"`
 }
 
 // MainTemplateData is used for generating main.go.
@@ -166,6 +175,31 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("could not create organization directory %s: %w", orgDir, err)
 	}
 
+	// New: Copy all chaincode source files to a central build/chaincodes directory
+	if len(cfg.Chaincodes) > 0 {
+		chaincodesBuildDir := filepath.Join(BuildDir, "chaincodes")
+		if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
+			return fmt.Errorf("could not create build/chaincodes directory: %w", err)
+		}
+
+		for _, cc := range cfg.Chaincodes {
+			if cc.Path == "" {
+				continue
+			}
+			srcPath := cc.Path
+			destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
+
+			input, err := os.ReadFile(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
+			}
+
+			if err := os.WriteFile(destPath, input, 0644); err != nil {
+				return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
+			}
+		}
+	}
+
 	// 2. Generate organization.yaml (contains only this org's config)
 	orgYAML, err := yaml.Marshal(org)
 	if err != nil {
@@ -198,9 +232,9 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing khoai-config.yaml: %w", err)
 	}
 
-	// 5. Create empty contracts directory
-	if err := os.MkdirAll(filepath.Join(orgDir, "contracts"), 0755); err != nil {
-		return fmt.Errorf("could not create contracts directory: %w", err)
+	// 5. Create empty chaincodes directory for the organization package
+	if err := os.MkdirAll(filepath.Join(orgDir, "chaincodes"), 0755); err != nil {
+		return fmt.Errorf("could not create chaincodes directory: %w", err)
 	}
 
 	// 6. Generate artifacts for each node within the organization
@@ -326,7 +360,7 @@ RUN go mod download
 # Goi truc tiep den organizations/ tu build context
 COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/main.go ./cmd/node/main.go
 COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/config.yaml ./config.yaml
-COPY organizations/{{.OrgName}}/contracts/ ./contracts/
+COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
@@ -430,7 +464,7 @@ RUN go mod download
 # Goi truc tiep den node cua organization workspace hien tai
 COPY nodes/{{.NodeID}}/main.go ./cmd/node/main.go
 COPY nodes/{{.NodeID}}/config.yaml ./config.yaml
-COPY contracts/ ./contracts/
+COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data

@@ -12,6 +12,10 @@ type BaseContract struct {
 	Ctx  StateContext
 }
 
+func RegisterContract(name string, c SmartContract) {
+	GlobalRegistry[name] = c
+}
+
 // SetName: Sets the contract name
 func (b *BaseContract) SetName(n []byte) {
 	b.Name = n

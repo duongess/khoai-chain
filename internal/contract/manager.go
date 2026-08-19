@@ -16,10 +16,9 @@ type ContractManager struct {
 
 func NewManager(chain *core.Blockchain) *ContractManager {
 	return &ContractManager{
-		contracts: make(map[string]sdk.SmartContract),
-		router:    &Router{},
-		Chain:     chain,
-		Mempool:   core.NewMempool(),
+		router:  &Router{},
+		Chain:   chain,
+		Mempool: core.NewMempool(),
 	}
 }
 
@@ -38,7 +37,7 @@ func (cm *ContractManager) GetSender() []byte {
 // RegisterApp: Register a new App
 func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	name := app.GetName()
-	cm.contracts[string(name)] = app
+	sdk.GlobalRegistry[string(name)] = app
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
@@ -46,7 +45,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
 	// 1. Find App
 	cm.currentSender = sender
-	app, exists := cm.contracts[string(contractName)]
+	app, exists := sdk.GlobalRegistry[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' is not installed", contractName)
 	}

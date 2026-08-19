@@ -49,6 +49,7 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 type BuilderConfig struct {
 	Network       *NetworkConfig       `yaml:"network,omitempty"`
 	Docker        *DockerConfig        `yaml:"docker,omitempty"`
+	Chaincodes    []ChaincodeConfig    `yaml:"chaincodes,omitempty"`
 	Organizations []OrganizationConfig `yaml:"organizations"`
 }
 
@@ -69,7 +70,6 @@ type DockerConfig struct {
 type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
 	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
-	Chaincodes  []ChaincodeConfig   `yaml:"chaincodes"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
 }
 
@@ -88,8 +88,8 @@ type RuntimeNodeConfig struct {
 
 // ChaincodeConfig defines a smart contract.
 type ChaincodeConfig struct {
-	Name    string `yaml:"name,omitempty"`
-	Package string `yaml:"package,omitempty"`
+	Name string `yaml:"name,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 // MainTemplateData is used for generating main.go.
@@ -279,10 +279,9 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 
 	finalConfig := RuntimeConfigContent{
-		NodeName:   uniqueNodeName,
-		DBPath:     "/app/data",
-		Chaincodes: org.Chaincodes, // Contracts are inherited from the organization
-		Peers:      allPeerEndpoints,
+		NodeName: uniqueNodeName,
+		DBPath:   "/app/data",
+		Peers:    allPeerEndpoints,
 	}
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
@@ -302,7 +301,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, org.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir, cfg.Chaincodes); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -387,7 +386,6 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	finalConfig := RuntimeConfigContent{
 		NodeName:           uniqueNodeName,
 		DBPath:             "/app/data",
-		Chaincodes:         org.Chaincodes,
 		Organization:       org.DisplayName,
 		NodeID:             node.ID,
 		DisplayName:        node.DisplayName,
@@ -407,7 +405,7 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, org.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir, cfg.Chaincodes); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -657,19 +655,13 @@ import (
 	"path/filepath"
 
 	// Import core
-	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/server"
 
-	{{range .Imports}}	"{{.}}"
-	{{end}}
-)
-
-var (
-	BuiltInNodeName string = "Unknown Node"
+	"khoai-chain/chaincodes"
 )
 
 func main() {
@@ -705,10 +697,7 @@ func main() {
 	contractManager := contract.NewManager(chain)
 
 	// Register contracts
-	contractManager.RegisterApp(examples.NewUsageExamples())
-	{{range .Registrations}}
-	contractManager.RegisterApp({{.}})
-	{{end}}
+	chaincodes.Init()
 
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
@@ -730,36 +719,6 @@ func main() {
 }
 	`
 
-	data := MainTemplateData{}
-	seen := make(map[string]bool)
-
-	for _, cc := range chaincodes {
-		// Add import if not already present
-		if !seen[cc.Package] {
-			data.Imports = append(data.Imports, cc.Package)
-			seen[cc.Package] = true
-		}
-		// Add registration line: bds.NewBDSContract()
-		// Assume package name is the last part of the path (e.g., bds)
-		pkgName := filepath.Base(cc.Package)
-
-		// Convert a name like "sample-contract" to a Go constructor function name like "NewSampleContract"
-		// 1. Split by "-": ["sample", "contract"]
-		// 2. Capitalize each part: ["Sample", "Contract"]
-		// 3. Join and prepend "New": "NewSampleContract"
-		var parts = strings.Split(cc.Name, "-")
-		var goNameParts []string
-		for _, part := range parts {
-			if len(part) > 0 {
-				goNameParts = append(goNameParts, strings.ToUpper(string(part[0]))+part[1:])
-			}
-		}
-		funcName := "New" + strings.Join(goNameParts, "")
-
-		regLine := fmt.Sprintf("%s.%s()", pkgName, funcName)
-		data.Registrations = append(data.Registrations, regLine)
-	}
-
 	// Write file
 	t, err := template.New("main").Parse(mainTmpl)
 	if err != nil {
@@ -772,7 +731,7 @@ func main() {
 	}
 	defer f.Close()
 
-	return t.Execute(f, data)
+	return t.Execute(f, mainTmpl)
 }
 
 // sanitize creates a filesystem-friendly name.

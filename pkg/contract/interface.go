@@ -1,5 +1,7 @@
 package contract
 
+var GlobalRegistry = make(map[string]SmartContract)
+
 // StateContext
 type StateContext interface {
 	PutState(key []byte, value []byte) error

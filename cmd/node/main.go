@@ -8,16 +8,13 @@ import (
 	"path/filepath"
 
 	// Import core
-	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/server"
-)
 
-var (
-	BuiltInNodeName string = "Unknown Node"
+	"khoai-chain/chaincodes"
 )
 
 func main() {
@@ -53,9 +50,7 @@ func main() {
 	contractManager := contract.NewManager(chain)
 
 	// Register contracts
-	contractManager.RegisterApp(examples.NewUsageExamples())
-	// contractManager.RegisterApp({{.}})
-	// {{end}}
+	chaincodes.Init()
 
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 

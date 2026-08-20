@@ -304,9 +304,10 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	httpPort := "9000"
 
 	finalConfig := ConfigContent{
-		NodeName: uniqueNodeName,
-		DBPath:   "/app/data",
-		Peers:    allPeerEndpoints,
+		NodeName:     uniqueNodeName,
+		DBPath:       "/app/data",
+		IdentityPath: "/app/identity",
+		Peers:        allPeerEndpoints,
 	}
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
@@ -398,19 +399,6 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 	httpPort := "9000"
 
-	type ConfigContent struct {
-		NodeName           string            `yaml:"node_name"`
-		DBPath             string            `yaml:"db_path"`
-		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
-		Organization       string            `yaml:"organization"`
-		NodeID             string            `yaml:"node_id"`
-		DisplayName        string            `yaml:"display_name"`
-		HTTPListenEndpoint string            `yaml:"http_listen"`
-		HTTPEndpoint       string            `yaml:"http_endpoint"`
-		P2PListenEndpoint  string            `yaml:"p2p_listen"`
-		P2PEndpoint        string            `yaml:"p2p_endpoint"`
-	}
-
 	finalConfig := ConfigContent{
 		NodeName:           uniqueNodeName,
 		DBPath:             "/app/data",
@@ -421,6 +409,8 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 		HTTPEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, httpPort),
 		P2PListenEndpoint:  fmt.Sprintf("0.0.0.0:%s", p2pPort),
 		P2PEndpoint:        fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
+		Permission:         org.Permission,
+		IdentityPath:       "/app/identity",
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)

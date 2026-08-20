@@ -66,7 +66,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			argsBytes = append(argsBytes, []byte(arg))
 		}
 
-		err := core.NM.VerifyAndConsume(msg.Nonce, msg.Sender)
+		err := core.NM.VerifyAndConsume(msg.Sender, msg.Nonce)
 		if err != nil {
 			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}

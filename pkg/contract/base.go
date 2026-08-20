@@ -74,12 +74,12 @@ func (b *BaseContract) Get(key []byte, target interface{}) error {
 	return nil
 }
 
-func (b *BaseContract) RequireCaller(allowed ...string) error {
-	sender := b.Ctx.GetSender()
-	for _, p := range allowed {
-		if p == string(sender) {
+func (b *BaseContract) RequireCaller(permissions ...string) error {
+	permission := b.Ctx.GetPermission()
+	for _, p := range permissions {
+		if p == permission {
 			return nil
 		}
 	}
-	return fmt.Errorf("⛔ Access denied! Sender '%s' does not have permission", sender)
+	return fmt.Errorf("Access denied! Sender '%s' does not have permission", permission)
 }

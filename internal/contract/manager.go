@@ -13,6 +13,7 @@ type ContractManager struct {
 	Chain         *core.Blockchain
 	Mempool       *core.Mempool
 	currentSender []byte
+	permission    string
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -35,6 +36,10 @@ func (cm *ContractManager) GetSender() []byte {
 	return cm.currentSender
 }
 
+func (cm *ContractManager) GetPermission() string {
+	return cm.permission
+}
+
 // RegisterApp: Register a new App
 func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	name := app.GetName()
@@ -46,6 +51,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
 	// 1. Find App
 	cm.currentSender = sender
+	cm.permission = core.PermissionNode
 	app, exists := sdk.GlobalRegistry[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' is not installed", contractName)

@@ -8,15 +8,18 @@ const (
 	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
 	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
 	MsgIDENTITY  = "IDENTITY"
+	MsgNonce     = "NONCE"
 )
 
 // Request gửi qua TCP
 type CommandMessage struct {
-	Type     string   `json:"type"`
-	Sender   string   `json:"sender"`
-	Contract string   `json:"contract"`
-	Function string   `json:"function"`
-	Args     []string `json:"args"`
+	Type      string   `json:"type"`
+	Sender    string   `json:"sender"`
+	Contract  string   `json:"contract"`
+	Function  string   `json:"function"`
+	Args      []string `json:"args"`
+	Nonce     string   `json:"nonce"`
+	Signature string   `json:"signature"`
 }
 
 type GetBlocksRequest struct {
@@ -34,6 +37,11 @@ type CommandIDENTITY struct {
 	Type       string `json:"type"`
 	PublicKey  string `json:"public_key"`
 	Permission string `json:"permission"`
+}
+
+type CommandNonce struct {
+	Type   string `json:"type"`
+	Sender string `json:"sender"`
 }
 
 // Response returned to Client

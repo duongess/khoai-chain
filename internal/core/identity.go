@@ -22,8 +22,8 @@ type IdentityMessage struct {
 	Permission string
 }
 
-var publicKeyNode []byte
-var permissionNode string
+var PublicKeyNode []byte
+var PermissionNode string
 var PublicKeyPeers = make(map[string]string)
 
 // GenerateIdentity tao ra mot cap khoa moi bang Ed25519
@@ -51,10 +51,10 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 		return fmt.Errorf("error decoding public key: %w", err)
 	}
 
-	publicKeyNode = pubBytes
-	permissionNode = permissionConf
+	PublicKeyNode = pubBytes
+	PermissionNode = permissionConf
 
-	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(publicKeyNode), permissionNode)
+	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(PublicKeyNode), PermissionNode)
 
 	return nil
 
@@ -63,24 +63,24 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 func GetIdentityMessage() *IdentityMessage {
 	return &IdentityMessage{
 		Type:       "IDENTITY",
-		PublicKey:  publicKeyNode,
-		Permission: permissionNode,
+		PublicKey:  PublicKeyNode,
+		Permission: PermissionNode,
 	}
 }
 
 // Verify dung Public Key de xac thuc chu ky cua mot thong diep
 func VerifySignature(pubKey ed25519.PublicKey, message []byte, signature []byte) error {
 	if len(pubKey) != ed25519.PublicKeySize {
-		return errors.New("kich thuoc public key khong hop le")
+		return errors.New("Invalid public key size")
 	}
 
 	if len(signature) != ed25519.SignatureSize {
-		return errors.New("kich thuoc chu ky khong hop le")
+		return errors.New("Invalid signature size")
 	}
 
 	isValid := ed25519.Verify(pubKey, message, signature)
 	if !isValid {
-		return errors.New("chu ky khong khop voi du lieu hoac public key")
+		return errors.New("Signature does not match the data or public key.")
 	}
 
 	return nil

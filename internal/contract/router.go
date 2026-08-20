@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -28,27 +29,58 @@ func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][
 	}
 
 	// 3. Prepare parameters for the function call
-	// Convention: User's function must accept ([][]byte)
-	inputArgs := []reflect.Value{reflect.ValueOf(args)}
+	// Convention: User's function must accept (a, b, c)
+	methodType := method.Type()
+	numIn := methodType.NumIn()
+
+	if len(args) != numIn {
+		return nil, fmt.Errorf("expected %d arguments, got %d", numIn, len(args))
+	}
+
+	var inputArgs []reflect.Value
+	for i := 0; i < numIn; i++ {
+		paramType := methodType.In(i)
+		argVal := reflect.ValueOf(string(args[i]))
+
+		// Neu tham so khac kieu string (vi du int), co the xu ly convert o day
+		if argVal.Type() != paramType {
+			argVal = argVal.Convert(paramType)
+		}
+		inputArgs = append(inputArgs, argVal)
+	}
 
 	// 4. CALL FUNCTION (Invoke)
 	results := method.Call(inputArgs)
 
 	// 5. Process the return results
-	// Convention: User's function must return ([]byte, error)
-	if len(results) < 2 {
-		return nil, fmt.Errorf("function must return 2 values: ([]byte, error)")
+	if len(results) == 1 {
+		if !results[0].IsNil() {
+			if err, ok := results[0].Interface().(error); ok {
+				return nil, err
+			}
+		}
+		return nil, nil
+	} else if len(results) >= 2 {
+		var resBytes []byte
+		if !results[0].IsNil() {
+			switch v := results[0].Interface().(type) {
+			case []byte:
+				resBytes = v
+			case string:
+				resBytes = []byte(v)
+			case []string:
+				resBytes, _ = json.Marshal(v)
+			}
+		}
+
+		var err error
+		if !results[1].IsNil() {
+			if e, ok := results[1].Interface().(error); ok {
+				err = e
+			}
+		}
+		return resBytes, err
 	}
 
-	// Get the result (Bytes)
-	resBytes := results[0].Interface().([]byte)
-
-	// Get the error (Error)
-	errObj := results[1].Interface()
-	var err error
-	if errObj != nil {
-		err = errObj.(error)
-	}
-
-	return resBytes, err
+	return nil, nil
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"net"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"khoai-chain/internal/core"
 
 	"gopkg.in/yaml.v3"
 )
@@ -73,6 +76,7 @@ type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
 	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
+	Permission  []string            `yaml:"permissions,omitempty"`
 }
 
 // MetadataConfig contains descriptive information about an organization.
@@ -173,6 +177,10 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 	// 1. Create the base directory for the organization
 	if err := os.MkdirAll(orgDir, 0755); err != nil {
 		return fmt.Errorf("could not create organization directory %s: %w", orgDir, err)
+	}
+
+	if err := saveIdentity(orgDir); err != nil {
+		return fmt.Errorf("error saving identity: %w", err)
 	}
 
 	// New: Copy all chaincode source files to a central build/chaincodes directory
@@ -775,4 +783,36 @@ func main() {
 // sanitize creates a filesystem-friendly name.
 func sanitize(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+}
+
+func saveIdentity(keystoreDir string) error {
+	identity, err := core.GenerateIdentity()
+	if err != nil {
+		return err
+	}
+
+	// Tao duong dan day du cho thu muc con 'identity'
+	identityDir := filepath.Join(keystoreDir, "identity")
+
+	// MkdirAll phai tao thu muc identity, khong phai keystoreDir
+	if err := os.MkdirAll(identityDir, 0700); err != nil {
+		return err
+	}
+
+	// Luu Private Key vao thu muc da duoc tao
+	privPath := filepath.Join(identityDir, "private.key")
+	err = os.WriteFile(privPath, identity.PrivateKey, 0600)
+	if err != nil {
+		return err
+	}
+
+	// Luu Public Key
+	pubPath := filepath.Join(identityDir, "public.pub")
+	pubHex := hex.EncodeToString(identity.PublicKey)
+	err = os.WriteFile(pubPath, []byte(pubHex), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

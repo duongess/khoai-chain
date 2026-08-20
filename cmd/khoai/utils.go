@@ -170,7 +170,7 @@ func p2pToHTTP(p2pEndpoint string) string {
 	// Case 2: no host or bind address is 0.0.0.0.
 	// This is the local Docker/single-host simulation case.
 	// Keep the existing convention: HTTP port = P2P port + 10000.
-	if host == "" || host == "0.0.0.0" {
+	if host == "" || host == "0.0.0.0" || host == "localhost" {
 		p2pPort, err := strconv.Atoi(p2pPortStr)
 		if err != nil {
 			return "localhost:9000"

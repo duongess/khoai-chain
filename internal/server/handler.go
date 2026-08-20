@@ -22,11 +22,23 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	fmt.Printf("Processing data: %s\n", string(payload))
 
 	var baseMsg genericMessage
-	// If JSON is malformed from the start -> Return JSON error to Client
 	if err := json.Unmarshal(payload, &baseMsg); err != nil {
-		// Package JSON error here
 		resp := ResponseMessage{Status: "Error", Error: "Invalid JSON format"}
 		return json.Marshal(resp)
+	}
+
+	// If the 'type' field is empty, it's likely a response to a request we sent earlier.
+	// Response messages (like ResponseMessage) don't have a 'type'.
+	// We should not process them as new requests, to avoid loops.
+	if baseMsg.Type == "" {
+		var respMsg ResponseMessage
+		// We try to unmarshal it as a ResponseMessage to confirm.
+		if err := json.Unmarshal(payload, &respMsg); err == nil && (respMsg.Status == "Success" || respMsg.Status == "Error") {
+			// It is indeed a response. Log it and do nothing else.
+			fmt.Printf("Received a response from peer: Status=%s, Result='%s', Error='%s'\n", respMsg.Status, respMsg.Result, respMsg.Error)
+			return nil, nil // Return nil to send no further messages.
+		}
+		// If it's not a ResponseMessage and has no type, it's an unknown command.
 	}
 
 	switch baseMsg.Type {
@@ -44,7 +56,6 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			argsBytes = append(argsBytes, []byte(arg))
 		}
 
-		// Gọi Contract
 		// Call Contract
 		result, err := manager.Execute(
 			[]byte(msg.Sender),
@@ -108,6 +119,15 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 		return json.Marshal(resp)
 
+	case MsgIDENTITY:
+		var msg CommandIDENTITY
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			return nil, err
+		}
+		core.PublicKeyPeers[msg.PublicKey] = msg.Permission
+
+		resp := ResponseMessage{Status: "Success"}
+		return json.Marshal(resp)
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

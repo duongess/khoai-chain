@@ -1,8 +1,6 @@
 module khoai-chain
 
-go 1.21.0
-
-toolchain go1.22.3
+go 1.22.3
 
 require (
 	github.com/dgraph-io/badger/v3 v3.2103.5
@@ -15,6 +13,7 @@ require (
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
+	github.com/duongess/khoaichain-sdk v0.4.2-beta
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect

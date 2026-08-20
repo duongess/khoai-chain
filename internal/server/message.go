@@ -7,7 +7,7 @@ const (
 	MsgNewBlock  = "NEW_BLOCK"  // Case 2: Send if there's a new block
 	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
 	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
-
+	MsgIDENTITY  = "IDENTITY"
 )
 
 // Request gửi qua TCP
@@ -28,6 +28,12 @@ type GetBlocksRequest struct {
 type SendBlocksRequest struct {
 	Type   string        `json:"type"`
 	Blocks []*core.Block `json:"blocks"`
+}
+
+type CommandIDENTITY struct {
+	Type       string `json:"type"`
+	PublicKey  string `json:"public_key"`
+	Permission string `json:"permission"`
 }
 
 // Response returned to Client

@@ -2,6 +2,7 @@
 /build/
 /data/
 /dist/
+/chaincodes/
 *.env
 khoai-config.yaml
 .version

@@ -113,7 +113,7 @@ func (s *Server) handleApproveJoin(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Approving join request from %s: this node (%s) will connect to it.\n", sourceEndpoint, targetEndpoint)
 
 	// 1. Connect to the source and persist it.
-	go s.ConnectToPeer(sourceEndpoint)
+	go s.ConnectAndSync(sourceEndpoint)
 	s.persistPeer(sourceEndpoint)
 
 	// 2. Tell the source to connect back and persist us.
@@ -178,7 +178,7 @@ func (s *Server) handleAddPeer(w http.ResponseWriter, r *http.Request) {
 
 	// Also connect back if not already connected
 	if !s.HasPeer(peerToAdd) {
-		go s.ConnectToPeer(peerToAdd)
+		go s.ConnectAndSync(peerToAdd)
 	}
 	s.persistPeer(peerToAdd)
 

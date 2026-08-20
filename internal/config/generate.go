@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"net"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"khoai-chain/internal/core"
 
 	"gopkg.in/yaml.v3"
 )
@@ -47,8 +50,11 @@ func LoadBuilderConfig(configPath string) (*BuilderConfig, error) {
 
 // BuilderConfig is the root configuration structure from khoai-config.yaml
 type BuilderConfig struct {
-	Network       *NetworkConfig       `yaml:"network,omitempty"`
-	Docker        *DockerConfig        `yaml:"docker,omitempty"`
+	Network *NetworkConfig `yaml:"network,omitempty"`
+	Docker  *DockerConfig  `yaml:"docker,omitempty"`
+	// Permissions defines roles that can be used for access control in chaincodes.
+	Permissions   []PermissionConfig   `yaml:"permissions,omitempty"`
+	Chaincodes    []ChaincodeConfig    `yaml:"chaincodes,omitempty"`
 	Organizations []OrganizationConfig `yaml:"organizations"`
 }
 
@@ -69,8 +75,8 @@ type DockerConfig struct {
 type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
 	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
-	Chaincodes  []ChaincodeConfig   `yaml:"chaincodes"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
+	Permission  string              `yaml:"permission,omitempty"`
 }
 
 // MetadataConfig contains descriptive information about an organization.
@@ -88,8 +94,15 @@ type RuntimeNodeConfig struct {
 
 // ChaincodeConfig defines a smart contract.
 type ChaincodeConfig struct {
-	Name    string `yaml:"name,omitempty"`
-	Package string `yaml:"package,omitempty"`
+	ID      string `yaml:"id,omitempty"`
+	Path    string `yaml:"path,omitempty"`
+	Version string `yaml:"version,omitempty"`
+}
+
+// PermissionConfig defines a role for access control.
+type PermissionConfig struct {
+	ID          string `yaml:"id"`
+	Description string `yaml:"description"`
 }
 
 // MainTemplateData is used for generating main.go.
@@ -166,6 +179,35 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("could not create organization directory %s: %w", orgDir, err)
 	}
 
+	if err := saveIdentity(orgDir); err != nil {
+		return fmt.Errorf("error saving identity: %w", err)
+	}
+
+	// New: Copy all chaincode source files to a central build/chaincodes directory
+	if len(cfg.Chaincodes) > 0 {
+		chaincodesBuildDir := filepath.Join(BuildDir, "chaincodes")
+		if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
+			return fmt.Errorf("could not create build/chaincodes directory: %w", err)
+		}
+
+		for _, cc := range cfg.Chaincodes {
+			if cc.Path == "" {
+				continue
+			}
+			srcPath := cc.Path
+			destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
+
+			input, err := os.ReadFile(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
+			}
+
+			if err := os.WriteFile(destPath, input, 0644); err != nil {
+				return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
+			}
+		}
+	}
+
 	// 2. Generate organization.yaml (contains only this org's config)
 	orgYAML, err := yaml.Marshal(org)
 	if err != nil {
@@ -198,9 +240,9 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error writing khoai-config.yaml: %w", err)
 	}
 
-	// 5. Create empty contracts directory
-	if err := os.MkdirAll(filepath.Join(orgDir, "contracts"), 0755); err != nil {
-		return fmt.Errorf("could not create contracts directory: %w", err)
+	// 5. Create empty chaincodes directory for the organization package
+	if err := os.MkdirAll(filepath.Join(orgDir, "chaincodes"), 0755); err != nil {
+		return fmt.Errorf("could not create chaincodes directory: %w", err)
 	}
 
 	// 6. Generate artifacts for each node within the organization
@@ -231,6 +273,27 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 		return err
 	}
 
+	// Collect all peer endpoints from the main builder config
+	var allPeerEndpoints []string
+	for _, otherOrg := range cfg.Organizations {
+		for _, otherNode := range otherOrg.Nodes {
+			// Don't add the current node to its own peer list
+			if otherNode.ID == node.ID && otherOrg.DisplayName == org.DisplayName {
+				continue
+			}
+
+			// Construct the internal Docker endpoint for this peer
+			_, peerP2PPort, err := net.SplitHostPort(otherNode.Endpoint)
+			if err != nil {
+				// This should have been caught by validation, but good to be safe
+				return fmt.Errorf("invalid endpoint for peer %s-%s: %v", otherOrg.DisplayName, otherNode.ID, err)
+			}
+			peerUniqueName := fmt.Sprintf("%s-%s", sanitize(otherOrg.DisplayName), otherNode.ID)
+			peerEndpoint := fmt.Sprintf("%s:%s", peerUniqueName, peerP2PPort)
+			allPeerEndpoints = append(allPeerEndpoints, peerEndpoint)
+		}
+	}
+
 	// A. Generate config.yaml for this node (to be included in the Image)
 	// Note: In Docker, the host is usually bound to 0.0.0.0
 
@@ -240,26 +303,11 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 	httpPort := "9000"
 
-	// This struct defines the content of the generated runtime config.yaml.
-	// It includes new fields for organization/node info while retaining
-	// old fields for compatibility with the existing runtime.
-	type RuntimeConfigContent struct {
-		NodeName           string            `yaml:"node_name"`
-		DBPath             string            `yaml:"db_path"`
-		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
-		Organization       string            `yaml:"organization"`
-		NodeID             string            `yaml:"node_id"`
-		DisplayName        string            `yaml:"display_name"`
-		HTTPListenEndpoint string            `yaml:"http_listen"`
-		HTTPEndpoint       string            `yaml:"http_endpoint"`
-		P2PListenEndpoint  string            `yaml:"p2p_listen"`
-		P2PEndpoint        string            `yaml:"p2p_endpoint"`
-	}
-
-	finalConfig := RuntimeConfigContent{
-		NodeName:   uniqueNodeName,
-		DBPath:     "/app/data",
-		Chaincodes: org.Chaincodes, // Contracts are inherited from the organization
+	finalConfig := ConfigContent{
+		NodeName:     uniqueNodeName,
+		DBPath:       "/app/data",
+		IdentityPath: "/app/identity",
+		Peers:        allPeerEndpoints,
 	}
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
@@ -268,6 +316,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, httpPort)
 	finalConfig.P2PListenEndpoint = fmt.Sprintf("0.0.0.0:%s", p2pPort)
 	finalConfig.P2PEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort)
+	finalConfig.Permission = org.Permission
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -279,7 +328,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, org.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -298,13 +347,15 @@ COPY dist/{{.SourceArchive}} ./src.zip
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
 
-# Tai thu vien phu thuoc cho du an
+# Chuyen go get thanh RUN de cap nhat SDK trong qua trinh build image
+RUN go get github.com/duongess/khoaichain-sdk@latest
+RUN go mod tidy
 RUN go mod download
 
 # Goi truc tiep den organizations/ tu build context
 COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/main.go ./cmd/node/main.go
 COPY organizations/{{.OrgName}}/nodes/{{.NodeID}}/config.yaml ./config.yaml
-COPY organizations/{{.OrgName}}/contracts/ ./contracts/
+COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
@@ -348,23 +399,9 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 	httpPort := "9000"
 
-	type RuntimeConfigContent struct {
-		NodeName           string            `yaml:"node_name"`
-		DBPath             string            `yaml:"db_path"`
-		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
-		Organization       string            `yaml:"organization"`
-		NodeID             string            `yaml:"node_id"`
-		DisplayName        string            `yaml:"display_name"`
-		HTTPListenEndpoint string            `yaml:"http_listen"`
-		HTTPEndpoint       string            `yaml:"http_endpoint"`
-		P2PListenEndpoint  string            `yaml:"p2p_listen"`
-		P2PEndpoint        string            `yaml:"p2p_endpoint"`
-	}
-
-	finalConfig := RuntimeConfigContent{
+	finalConfig := ConfigContent{
 		NodeName:           uniqueNodeName,
 		DBPath:             "/app/data",
-		Chaincodes:         org.Chaincodes,
 		Organization:       org.DisplayName,
 		NodeID:             node.ID,
 		DisplayName:        node.DisplayName,
@@ -372,6 +409,8 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 		HTTPEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, httpPort),
 		P2PListenEndpoint:  fmt.Sprintf("0.0.0.0:%s", p2pPort),
 		P2PEndpoint:        fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
+		Permission:         org.Permission,
+		IdentityPath:       "/app/identity",
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -384,7 +423,7 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, org.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -403,13 +442,15 @@ COPY dist/{{.SourceArchive}} ./src.zip
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
 
-# Tai thu vien phu thuoc cho du an
+# Chuyen go get thanh RUN de cap nhat SDK trong qua trinh build image
+RUN go get github.com/duongess/khoaichain-sdk@latest
+RUN go mod tidy
 RUN go mod download
 
 # Goi truc tiep den node cua organization workspace hien tai
 COPY nodes/{{.NodeID}}/main.go ./cmd/node/main.go
 COPY nodes/{{.NodeID}}/config.yaml ./config.yaml
-COPY contracts/ ./contracts/
+COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
@@ -524,6 +565,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
+      - ./organizations/{{.OrgName}}/identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -542,6 +584,7 @@ services:
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
 		Name     string // unique name: vingroup-hn
+		OrgName  string // sanitized org name: vingroup
 		NodeID   string // node id: hn
 		P2PPort  string // e.g., 8080
 		HTTPPort string // e.g., 18080
@@ -561,6 +604,7 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 
 		allNodes = append(allNodes, ComposeNodeInfo{
 			Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			OrgName:  sanitizedOrgName,
 			NodeID:   node.ID,
 			P2PPort:  p2pPort,
 			HTTPPort: fmt.Sprintf("%d", httpPort),
@@ -604,6 +648,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config
+      - ./organizations/{{.OrgName}}/identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -622,31 +667,26 @@ services:
 }
 
 // Generate main file
-func generateMainFile(outputDir string, chaincodes []ChaincodeConfig) error {
+func generateMainFile(outputDir string) error {
 
 	mainTmpl := `package main
 
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	// Import core
-	"khoai-chain/examples"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/server"
 
-	{{range .Imports}}	"{{.}}"
-	{{end}}
-)
-
-var (
-	BuiltInNodeName string = "Unknown Node"
+	"khoai-chain/chaincodes"
 )
 
 func main() {
@@ -676,28 +716,30 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
+	err = core.LoadIdentity(conf.IdentityPath, conf.Permission)
+	if err != nil {
+		log.Fatalf("Error loading identity file: %v", err)
+		os.Exit(1)
+	}
+
 	chain := core.InitBlockchain(db)
 
 	// 4. Initialize Smart Contract Manager
 	contractManager := contract.NewManager(chain)
 
 	// Register contracts
-	contractManager.RegisterApp(examples.NewUsageExamples())
-	{{range .Registrations}}
-	contractManager.RegisterApp({{.}})
-	{{end}}
+	chaincodes.Init()
 
 	fmt.Printf("- Blockchain Height: %d\n", chain.GetBestHeight())
 
 	// 5. Initialize P2P Server
 	// The P2P server handles the core blockchain protocol (block and transaction gossip).
-	srv := p2p.NewServer(conf.P2PEndpoint, contractManager)
+	srv := server.NewServer(conf.P2PEndpoint, contractManager)
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
 	// 6. Initialize HTTP Control Plane
 	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
-	// We assume the 'p2p.Server' struct also implements http.Handler to serve these requests.
 	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
 	go func() {
 		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
@@ -707,36 +749,6 @@ func main() {
 	select {}
 }
 	`
-
-	data := MainTemplateData{}
-	seen := make(map[string]bool)
-
-	for _, cc := range chaincodes {
-		// Add import if not already present
-		if !seen[cc.Package] {
-			data.Imports = append(data.Imports, cc.Package)
-			seen[cc.Package] = true
-		}
-		// Add registration line: bds.NewBDSContract()
-		// Assume package name is the last part of the path (e.g., bds)
-		pkgName := filepath.Base(cc.Package)
-
-		// Convert a name like "sample-contract" to a Go constructor function name like "NewSampleContract"
-		// 1. Split by "-": ["sample", "contract"]
-		// 2. Capitalize each part: ["Sample", "Contract"]
-		// 3. Join and prepend "New": "NewSampleContract"
-		var parts = strings.Split(cc.Name, "-")
-		var goNameParts []string
-		for _, part := range parts {
-			if len(part) > 0 {
-				goNameParts = append(goNameParts, strings.ToUpper(string(part[0]))+part[1:])
-			}
-		}
-		funcName := "New" + strings.Join(goNameParts, "")
-
-		regLine := fmt.Sprintf("%s.%s()", pkgName, funcName)
-		data.Registrations = append(data.Registrations, regLine)
-	}
 
 	// Write file
 	t, err := template.New("main").Parse(mainTmpl)
@@ -750,10 +762,42 @@ func main() {
 	}
 	defer f.Close()
 
-	return t.Execute(f, data)
+	return t.Execute(f, mainTmpl)
 }
 
 // sanitize creates a filesystem-friendly name.
 func sanitize(name string) string {
 	return strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+}
+
+func saveIdentity(keystoreDir string) error {
+	identity, err := core.GenerateIdentity()
+	if err != nil {
+		return err
+	}
+
+	// Tao duong dan day du cho thu muc con 'identity'
+	identityDir := filepath.Join(keystoreDir, "identity")
+
+	// MkdirAll phai tao thu muc identity, khong phai keystoreDir
+	if err := os.MkdirAll(identityDir, 0700); err != nil {
+		return err
+	}
+
+	// Luu Private Key vao thu muc da duoc tao
+	privPath := filepath.Join(identityDir, "private.key")
+	err = os.WriteFile(privPath, identity.PrivateKey, 0600)
+	if err != nil {
+		return err
+	}
+
+	// Luu Public Key
+	pubPath := filepath.Join(identityDir, "public.pub")
+	pubHex := hex.EncodeToString(identity.PublicKey)
+	err = os.WriteFile(pubPath, []byte(pubHex), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

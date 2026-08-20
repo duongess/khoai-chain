@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
+	"khoai-chain/internal/core"
 	"net"
 	"net/http"
 	"sync"
@@ -43,6 +44,8 @@ func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 // stored here, only accepted peers are.
 func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath string) {
 	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	s.config = conf
 	s.configPath = configPath
 	if conf != nil {
@@ -60,7 +63,6 @@ func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath str
 			s.HTTPEndpoint = conf.HTTPEndpoint
 		}
 	}
-	s.lock.Unlock()
 }
 
 func (s *Server) Start() {
@@ -105,19 +107,12 @@ func (s *Server) Stop() {
 	s.Peers = make(map[string]*Peer)
 }
 
-func (s *Server) ConnectToPeer(address string) {
-	if address == "" || address == s.Endpoint || s.HasPeer(address) {
+func (s *Server) SyncWithPeer(peer *Peer) {
+	if peer == nil {
 		return
 	}
-	fmt.Printf("Connecting to %s...\n", address)
-
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Printf("Can't connect to %s: %v\n", address, err)
-		return
-	}
-	s.addPeer(conn, address)
-	fmt.Println("Sending initial sync request...")
+	address := peer.Endpoint
+	fmt.Printf("Sending initial sync request to %s...\n", address)
 	if s.Contracts == nil || s.Contracts.Chain == nil {
 		return
 	}
@@ -127,19 +122,50 @@ func (s *Server) ConnectToPeer(address string) {
 		Sender: s.Endpoint,
 		Hashes: hashes,
 	}
-	reqBytes, _ := json.Marshal(req)
-	conn.Write(append(reqBytes, '\n'))
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		fmt.Printf("Failed to marshal sync request for %s: %v\n", address, err)
+		s.DisconnectToPeer(address) // Clean up the failed connection.
+		return
+	}
 
+	if err := peer.Send(append(reqBytes, '\n')); err != nil {
+		fmt.Printf("Failed to send sync request to %s: %v\n", address, err)
+		// The peer's ReadLoop will likely handle the disconnection.
+	}
 }
 
-func (s *Server) AddPeer(conn net.Conn) {
-	s.addPeer(conn, conn.RemoteAddr().String())
+func (s *Server) ConnectToPeer(address string) (*Peer, error) {
+	if address == "" || address == s.Endpoint || s.HasPeer(address) {
+		return nil, nil
+	}
+	fmt.Printf("Connecting to %s...\n", address)
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		fmt.Printf("Can't connect to %s: %v\n", address, err)
+		return nil, err
+	}
+
+	peer := s.addPeer(conn)
+	return peer, nil
 }
 
-func (s *Server) addPeer(conn net.Conn, endpoint string) {
+func (s *Server) ConnectAndSync(address string) {
+	peer, err := s.ConnectToPeer(address)
+	if err != nil {
+		return
+	}
+	if peer != nil {
+		s.SyncWithPeer(peer)
+	}
+}
+
+func (s *Server) addPeer(conn net.Conn) *Peer {
 	peer := NewPeer(conn, s.Contracts)
-	peer.Endpoint = endpoint
+	peer.Endpoint = conn.RemoteAddr().String()
 	s.addPeerObject(peer)
+	return peer
 }
 
 func (s *Server) addPeerObject(peer *Peer) {
@@ -304,11 +330,54 @@ func (s *Server) connectPersistedPeers() {
 		s.lock.RUnlock()
 		return
 	}
-	peers := append([]string(nil), s.config.Peers...)
+	peersToConnect := append([]string(nil), s.config.Peers...)
 	s.lock.RUnlock()
-	for _, endpoint := range peers {
-		go s.ConnectToPeer(endpoint)
+
+	var connectedPeers []*Peer
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Phase 1: Connect to all peers
+	fmt.Println("Connecting to all persisted peers...")
+	for _, endpoint := range peersToConnect {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			peer, err := s.ConnectToPeer(addr)
+			if err != nil {
+				return // Error already logged
+			}
+			if peer != nil {
+				mu.Lock()
+				connectedPeers = append(connectedPeers, peer)
+				mu.Unlock()
+			}
+		}(endpoint)
 	}
+
+	wg.Wait()
+
+	// Phase 2: Sync with all successfully connected peers
+	if len(connectedPeers) > 0 {
+		fmt.Printf("All %d connection attempts finished. Starting synchronization...\n", len(connectedPeers))
+		for _, peer := range connectedPeers {
+			go s.SyncWithPeer(peer)
+		}
+	}
+
+	// Phase 3: Send a hardcoded transaction after connecting and starting sync.
+	// This is run in a goroutine to avoid blocking the startup process.
+	s.sendIdentity()
+}
+
+func (s *Server) sendIdentity() {
+	// This is a placeholder for sending a transaction after startup.
+	time.Sleep(10 * time.Second)
+
+	msg := core.GetIdentityMessage()
+
+	msgBytes, _ := json.Marshal(msg)
+	s.Broadcast(string(msgBytes))
 }
 
 func (s *Server) persistPeer(endpoint string) {

@@ -107,6 +107,15 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 		return json.Marshal(resp)
 
+	case MsgIDENTITY:
+		var msg CommandIDENTITY
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			return nil, err
+		}
+		core.PublicKeyPeers[msg.PublicKey] = msg.Permission
+
+		resp := ResponseMessage{Status: "Success"}
+		return json.Marshal(resp)
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

@@ -38,12 +38,12 @@ func BuildMessageBytes(msg CommandMessage) []byte {
 }
 
 func main() {
-	serverAddress := "localhost:9000"
+	serverAddress := "0.0.0.0:8080"
 
 	// Nhap truc tiep Hex string cua Private Key va Public Key de test
 	// Vi du: tao cap khoa Ed25519 va dien vao day
-	privKeyHex := "YOUR_PRIVATE_KEY_HEX"
-	pubKeyHex := "YOUR_PUBLIC_KEY_HEX"
+	privKeyHex := "105daa375f69aca1a4750da1cda05cfd996218333968a4a827360a5cb6dae6ed9737530538514654c8e3f650b0c02c9535e61d33958e25b65e3a5b5a0506c010"
+	pubKeyHex := "9737530538514654c8e3f650b0c02c9535e61d33958e25b65e3a5b5a0506c010"
 
 	privBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {
@@ -53,25 +53,25 @@ func main() {
 	privKey := ed25519.PrivateKey(privBytes)
 
 	// --- BUOC 1: GOI LAY NONCE (CHALLENGE) ---
-	conn1, err := net.Dial("tcp", serverAddress)
+	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
 		fmt.Println("Could not connect to server for nonce:", err)
 		return
 	}
-	defer conn1.Close()
+	defer conn.Close()
 
 	nonceReq := CommandNonce{
 		Type:   "NONCE",
 		Sender: pubKeyHex,
 	}
 	noncePayload, _ := json.Marshal(nonceReq)
-	_, err = conn1.Write(append(noncePayload, '\n'))
+	_, err = conn.Write(append(noncePayload, '\n'))
 	if err != nil {
 		fmt.Println("Could not send nonce request:", err)
 		return
 	}
 
-	nonceRespStr, err := bufio.NewReader(conn1).ReadString('\n')
+	nonceRespStr, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		fmt.Println("Could not read nonce response:", err)
 		return
@@ -87,19 +87,12 @@ func main() {
 	fmt.Println("Got Nonce/Token:", receivedNonce)
 
 	// --- BUOC GIAO DICH: KY SO VA GOI CONTRACT ---
-	conn2, err := net.Dial("tcp", serverAddress)
-	if err != nil {
-		fmt.Println("Could not connect to server for execute:", err)
-		return
-	}
-	defer conn2.Close()
-
 	cmd := CommandMessage{
 		Type:     "EXECUTE",
 		Sender:   pubKeyHex,
 		Contract: "examplesgolang",
-		Function: "TestAdd",
-		Args:     []string{"a", "b"},
+		Function: "CreateRawBatch",
+		Args:     []string{"1", "1"},
 		Nonce:    receivedNonce,
 	}
 
@@ -109,13 +102,13 @@ func main() {
 	cmd.Signature = hex.EncodeToString(signature)
 
 	execPayload, _ := json.Marshal(cmd)
-	_, err = conn2.Write(append(execPayload, '\n'))
+	_, err = conn.Write(append(execPayload, '\n'))
 	if err != nil {
 		fmt.Println("Could not send execute request:", err)
 		return
 	}
 
-	execRespStr, err := bufio.NewReader(conn2).ReadString('\n')
+	execRespStr, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		fmt.Println("Could not read execute response:", err)
 		return

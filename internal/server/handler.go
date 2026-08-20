@@ -68,25 +68,28 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		err := core.NM.VerifyAndConsume(msg.Nonce, msg.Sender)
 		if err != nil {
-			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}
 
 		pubKeyBytes, err := hex.DecodeString(msg.Sender)
 		if err != nil {
-			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
 		}
+
 		sigBytes, err := hex.DecodeString(msg.Signature)
 		if err != nil {
-			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
 		}
+
 		messageBytes := BuildMessageBytes(msg)
+
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
-			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}
 
 		// Call Contract
@@ -96,14 +99,14 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			[]byte(msg.Function),
 			argsBytes,
 		)
-		// Package ResponseMessage here
+
 		var resp ResponseMessage
 		if err != nil {
 			resp = ResponseMessage{Status: "Error", Error: err.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
 		}
-		// Return marshaled bytes
+
 		return json.Marshal(resp)
 
 	case MsgSendChain:
@@ -174,7 +177,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		var nonce, err = core.NM.GenerateChallenge(msg.Sender)
 		if err != nil {
-			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})

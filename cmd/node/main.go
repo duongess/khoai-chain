@@ -44,7 +44,7 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
-	if core.LoadPublicKey(conf.IdentityPath) == nil {
+	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
 		os.Exit(1)
 	}
 

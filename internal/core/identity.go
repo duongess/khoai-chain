@@ -16,7 +16,8 @@ type Identity struct {
 	PrivateKey ed25519.PrivateKey `yaml:"-"`
 }
 
-var publicKey []byte
+var PublicKey []byte
+var Permission string
 
 // GenerateIdentity tao ra mot cap khoa moi bang Ed25519
 func GenerateIdentity() (*Identity, error) {
@@ -31,7 +32,7 @@ func GenerateIdentity() (*Identity, error) {
 	}, nil
 }
 
-func LoadPublicKey(keyDir string) error {
+func LoadIdentity(keyDir string, permission string) error {
 	pubPath := filepath.Join(keyDir, "public.pub")
 	pubHex, err := os.ReadFile(pubPath)
 	if err != nil {
@@ -43,7 +44,9 @@ func LoadPublicKey(keyDir string) error {
 		return fmt.Errorf("error decoding public key: %w", err)
 	}
 
-	publicKey = pubBytes
+	PublicKey = pubBytes
+	Permission = permission
+
 	return nil
 
 }

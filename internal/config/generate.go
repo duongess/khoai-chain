@@ -76,7 +76,7 @@ type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
 	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
-	Permission  []string            `yaml:"permissions,omitempty"`
+	Permission  string              `yaml:"permissions,omitempty"`
 }
 
 // MetadataConfig contains descriptive information about an organization.
@@ -303,24 +303,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 	httpPort := "9000"
 
-	// This struct defines the content of the generated runtime config.yaml.
-	// It includes new fields for organization/node info while retaining
-	// old fields for compatibility with the existing runtime.
-	type RuntimeConfigContent struct {
-		NodeName           string            `yaml:"node_name"`
-		DBPath             string            `yaml:"db_path"`
-		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
-		Organization       string            `yaml:"organization"`
-		NodeID             string            `yaml:"node_id"`
-		DisplayName        string            `yaml:"display_name"`
-		HTTPListenEndpoint string            `yaml:"http_listen"`
-		HTTPEndpoint       string            `yaml:"http_endpoint"`
-		P2PListenEndpoint  string            `yaml:"p2p_listen"`
-		P2PEndpoint        string            `yaml:"p2p_endpoint"`
-		Peers              []string          `yaml:"peers,omitempty"`
-	}
-
-	finalConfig := RuntimeConfigContent{
+	finalConfig := ConfigContent{
 		NodeName: uniqueNodeName,
 		DBPath:   "/app/data",
 		Peers:    allPeerEndpoints,
@@ -332,6 +315,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, httpPort)
 	finalConfig.P2PListenEndpoint = fmt.Sprintf("0.0.0.0:%s", p2pPort)
 	finalConfig.P2PEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort)
+	finalConfig.Permission = org.Permission
 
 	configContent, err := yaml.Marshal(finalConfig)
 	if err != nil {
@@ -414,7 +398,7 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 	httpPort := "9000"
 
-	type RuntimeConfigContent struct {
+	type ConfigContent struct {
 		NodeName           string            `yaml:"node_name"`
 		DBPath             string            `yaml:"db_path"`
 		Chaincodes         []ChaincodeConfig `yaml:"chaincodes"`
@@ -427,7 +411,7 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 		P2PEndpoint        string            `yaml:"p2p_endpoint"`
 	}
 
-	finalConfig := RuntimeConfigContent{
+	finalConfig := ConfigContent{
 		NodeName:           uniqueNodeName,
 		DBPath:             "/app/data",
 		Organization:       org.DisplayName,

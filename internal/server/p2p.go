@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/config"
 	"khoai-chain/internal/contract"
+	"khoai-chain/internal/core"
 	"net"
 	"net/http"
 	"sync"
@@ -363,6 +364,46 @@ func (s *Server) connectPersistedPeers() {
 			go s.SyncWithPeer(peer)
 		}
 	}
+
+	// Phase 3: Send a hardcoded transaction after connecting and starting sync.
+	// This is run in a goroutine to avoid blocking the startup process.
+	go s.sendIdentity()
+}
+
+func (s *Server) sendIdentity() {
+	// This is a placeholder for sending a transaction after startup.
+	time.Sleep(10 * time.Second)
+
+	fmt.Println(">>> Attempting to send a sample transaction after startup...")
+
+	// 1. Get the node's own public key to use as the sender.
+	senderPubKey := core.GetPublicKey()
+	if senderPubKey == nil {
+		fmt.Println("Could not send sample transaction: public key not loaded.")
+		return
+	}
+
+	// 2. Define the transaction details (hardcoded for this example).
+	contractName := []byte("khoai-token")
+	functionName := []byte("transfer")
+	args := [][]byte{
+		[]byte("recipient-address-here"),
+		[]byte("100"),
+	}
+
+	// 3. Execute the transaction via the contract manager.
+	if s.Contracts == nil {
+		fmt.Println("Could not send sample transaction: ContractManager is nil.")
+		return
+	}
+
+	result, err := s.Contracts.Execute(senderPubKey, contractName, functionName, args)
+	if err != nil {
+		fmt.Printf("Error sending sample transaction: %v\n", err)
+		return
+	}
+
+	fmt.Printf(">>> Sample transaction sent successfully. Result: %s\n", string(result))
 }
 
 func (s *Server) persistPeer(endpoint string) {

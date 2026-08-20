@@ -18,6 +18,7 @@ type ConfigContent struct {
 	Organization string            `yaml:"organization"`
 	NodeID       string            `yaml:"node_id"`
 	DisplayName  string            `yaml:"display_name"`
+	Permission   string            `yaml:"permission"`
 	// Endpoint is retained for old runtime configs; new configs use the four
 	// explicit control-plane/data-plane addresses below.
 	Endpoint           string   `yaml:"endpoint,omitempty"`

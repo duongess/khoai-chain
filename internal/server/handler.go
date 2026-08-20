@@ -56,6 +56,11 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			argsBytes = append(argsBytes, []byte(arg))
 		}
 
+		var err = core.NM.VerifyAndConsume(msg.Nonce, msg.Sender)
+		if err != nil {
+			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
 		// Call Contract
 		result, err := manager.Execute(
 			[]byte(msg.Sender),
@@ -128,6 +133,14 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		resp := ResponseMessage{Status: "Success"}
 		return json.Marshal(resp)
+
+	case MsgNonce:
+		var msg CommandNonce
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			return nil, err
+		}
+
+		core.NM.GenerateChallenge(msg.Sender)
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

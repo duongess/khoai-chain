@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"khoai-chain/internal/contract"
@@ -11,6 +13,14 @@ import (
 // []byte is the JSON data ALREADY PACKAGED to send back to the other party.
 func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager) ([]byte, error) {
 	return handleMessage(payload, s, manager, nil)
+}
+
+// BuildMessageBytes prepares the payload for signing and verification by omitting the signature field.
+func BuildMessageBytes(msg CommandMessage) []byte {
+	temp := msg
+	temp.Signature = ""
+	data, _ := json.Marshal(temp)
+	return data
 }
 
 // genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.
@@ -56,7 +66,25 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			argsBytes = append(argsBytes, []byte(arg))
 		}
 
-		var err = core.NM.VerifyAndConsume(msg.Nonce, msg.Sender)
+		err := core.NM.VerifyAndConsume(msg.Nonce, msg.Sender)
+		if err != nil {
+			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
+		pubKeyBytes, err := hex.DecodeString(msg.Sender)
+		if err != nil {
+			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+		}
+
+		if len(pubKeyBytes) != ed25519.PublicKeySize {
+			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+		}
+		sigBytes, err := hex.DecodeString(msg.Signature)
+		if err != nil {
+			json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+		}
+		messageBytes := BuildMessageBytes(msg)
+		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
 			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}

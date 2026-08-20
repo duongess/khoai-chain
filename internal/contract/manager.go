@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/core"
 	sdk "khoai-chain/pkg/contract"
+	"time"
 )
 
 type ContractManager struct {
@@ -65,6 +66,7 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 		contractName,
 		method,
 		args,
+		time.Now().UnixNano(),
 	)
 
 	// 4. MINE BLOCK (Instant Mining)

@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/sha256"
 	"fmt"
-	"time"
 )
 
 // 1. The "Payload" (The business content you want to send)
@@ -24,10 +23,9 @@ type Transaction struct {
 }
 
 // 3. Quick Transaction creation function (Helper/Constructor)
-func NewTransaction(sender, contract, function []byte, args [][]byte) *Transaction {
+func NewTransaction(sender, contract, function []byte, args [][]byte, timestamp int64) *Transaction {
 	tx := &Transaction{
-		// ID and Signature will be calculated after signing
-		Timestamp: time.Now().UnixNano(),
+		Timestamp: timestamp,
 		Sender:    sender,
 		Payload: TxPayload{
 			Contract: contract,

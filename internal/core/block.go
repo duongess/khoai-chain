@@ -30,7 +30,7 @@ func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
 // NewGenesisBlock creates the first block (Genesis Block)
 func NewGenesisBlock() *Block {
 	// Create a coinbase transaction
-	genesisTx := NewTransaction([]byte("System"), []byte("KhoaiChain"), []byte("Init"), [][]byte{[]byte("Genesis")})
+	genesisTx := NewTransaction([]byte("System"), []byte("KhoaiChain"), []byte("Init"), [][]byte{[]byte("Genesis")}, 0)
 	return NewBlock([]*Transaction{genesisTx}, []byte{}, 0)
 }
 

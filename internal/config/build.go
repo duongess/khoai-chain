@@ -13,6 +13,7 @@ import (
 type ConfigContent struct {
 	NodeName     string            `yaml:"node_name"`
 	DBPath       string            `yaml:"db_path"`
+	IdentityPath string            `yaml:"identity_path"`
 	Chaincodes   []ChaincodeConfig `yaml:"chaincodes"`
 	Organization string            `yaml:"organization"`
 	NodeID       string            `yaml:"node_id"`

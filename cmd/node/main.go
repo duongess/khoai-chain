@@ -44,6 +44,10 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
+	if core.LoadPublicKey(conf.IdentityPath) == nil {
+		os.Exit(1)
+	}
+
 	chain := core.InitBlockchain(db)
 
 	// 4. Initialize Smart Contract Manager

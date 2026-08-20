@@ -3,7 +3,11 @@ package core
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 )
 
 // Identity luu tru cap khoa thuoc ve mot thuc the tren mang
@@ -11,6 +15,8 @@ type Identity struct {
 	PublicKey  ed25519.PublicKey  `yaml:"public_key"`
 	PrivateKey ed25519.PrivateKey `yaml:"-"`
 }
+
+var publicKey []byte
 
 // GenerateIdentity tao ra mot cap khoa moi bang Ed25519
 func GenerateIdentity() (*Identity, error) {
@@ -23,6 +29,23 @@ func GenerateIdentity() (*Identity, error) {
 		PublicKey:  pub,
 		PrivateKey: priv,
 	}, nil
+}
+
+func LoadPublicKey(keyDir string) error {
+	pubPath := filepath.Join(keyDir, "public.pub")
+	pubHex, err := os.ReadFile(pubPath)
+	if err != nil {
+		return fmt.Errorf("don't read public key: %w", err)
+	}
+
+	pubBytes, err := hex.DecodeString(string(pubHex))
+	if err != nil {
+		return fmt.Errorf("error decoding public key: %w", err)
+	}
+
+	publicKey = pubBytes
+	return nil
+
 }
 
 // Verify dung Public Key de xac thuc chu ky cua mot thong diep

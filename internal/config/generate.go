@@ -591,6 +591,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
+	  - ./identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -671,6 +672,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config
+	  - ./identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always

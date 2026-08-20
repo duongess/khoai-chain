@@ -76,7 +76,7 @@ type OrganizationConfig struct {
 	DisplayName string              `yaml:"display_name"`
 	Metadata    *MetadataConfig     `yaml:"metadata,omitempty"`
 	Nodes       []RuntimeNodeConfig `yaml:"nodes"`
-	Permission  string              `yaml:"permissions,omitempty"`
+	Permission  string              `yaml:"permission,omitempty"`
 }
 
 // MetadataConfig contains descriptive information about an organization.
@@ -714,6 +714,7 @@ func main() {
 
 	// 3. Initialize Blockchain
 	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
+		fmt.Printf("Error loading identity file: %v\n", err)
 		os.Exit(1)
 	}
 

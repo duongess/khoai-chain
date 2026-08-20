@@ -45,6 +45,7 @@ func main() {
 
 	// 3. Initialize Blockchain
 	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
+		fmt.Printf("Error loading identity file: %v\n", err)
 		os.Exit(1)
 	}
 

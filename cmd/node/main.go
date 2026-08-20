@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,8 +45,9 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
-	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
-		fmt.Printf("Error loading identity file: %v\n", err)
+	err = core.LoadIdentity(conf.IdentityPath, conf.Permission)
+	if err != nil {
+		log.Fatalf("Error loading identity file: %v", err)
 		os.Exit(1)
 	}
 

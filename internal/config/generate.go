@@ -565,7 +565,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./organizations/{{.OrgName}}/nodes/{{.NodeID}}:/app/node-config
-      - ./identity:/app/identity
+      - ./organizations/{{.OrgName}}/identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -584,6 +584,7 @@ services:
 func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 	type ComposeNodeInfo struct {
 		Name     string // unique name: vingroup-hn
+		OrgName  string // sanitized org name: vingroup
 		NodeID   string // node id: hn
 		P2PPort  string // e.g., 8080
 		HTTPPort string // e.g., 18080
@@ -603,6 +604,7 @@ func GenerateWorkspaceDockerCompose(baseDir string, cfg *BuilderConfig) error {
 
 		allNodes = append(allNodes, ComposeNodeInfo{
 			Name:     fmt.Sprintf("%s-%s", sanitizedOrgName, node.ID),
+			OrgName:  sanitizedOrgName,
 			NodeID:   node.ID,
 			P2PPort:  p2pPort,
 			HTTPPort: fmt.Sprintf("%d", httpPort),
@@ -646,7 +648,7 @@ services:
     volumes:
       - ./data/{{.Name}}:/app/data
       - ./nodes/{{.NodeID}}:/app/node-config
-      - ./identity:/app/identity
+      - ./organizations/{{.OrgName}}/identity:/app/identity
     networks:
       - {{$.NetworkName}}
     restart: always
@@ -672,6 +674,7 @@ func generateMainFile(outputDir string) error {
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -713,8 +716,9 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
-	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
-		fmt.Printf("Error loading identity file: %v\n", err)
+	err = core.LoadIdentity(conf.IdentityPath, conf.Permission)
+	if err != nil {
+		log.Fatalf("Error loading identity file: %v", err)
 		os.Exit(1)
 	}
 

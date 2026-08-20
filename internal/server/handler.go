@@ -44,7 +44,6 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			argsBytes = append(argsBytes, []byte(arg))
 		}
 
-		// Gọi Contract
 		// Call Contract
 		result, err := manager.Execute(
 			[]byte(msg.Sender),

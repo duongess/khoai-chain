@@ -106,21 +106,12 @@ func (s *Server) Stop() {
 	s.Peers = make(map[string]*Peer)
 }
 
-func (s *Server) ConnectToPeer(address string) {
-	if address == "" || address == s.Endpoint || s.HasPeer(address) {
+func (s *Server) SyncWithPeer(peer *Peer) {
+	if peer == nil {
 		return
 	}
-	fmt.Printf("Connecting to %s...\n", address)
-
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Printf("Can't connect to %s: %v\n", address, err)
-		return
-	}
-
-	peer := s.addPeer(conn)
-
-	fmt.Println("Sending initial sync request...")
+	address := peer.Endpoint
+	fmt.Printf("Sending initial sync request to %s...\n", address)
 	if s.Contracts == nil || s.Contracts.Chain == nil {
 		return
 	}
@@ -140,6 +131,32 @@ func (s *Server) ConnectToPeer(address string) {
 	if err := peer.Send(append(reqBytes, '\n')); err != nil {
 		fmt.Printf("Failed to send sync request to %s: %v\n", address, err)
 		// The peer's ReadLoop will likely handle the disconnection.
+	}
+}
+
+func (s *Server) ConnectToPeer(address string) (*Peer, error) {
+	if address == "" || address == s.Endpoint || s.HasPeer(address) {
+		return nil, nil
+	}
+	fmt.Printf("Connecting to %s...\n", address)
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		fmt.Printf("Can't connect to %s: %v\n", address, err)
+		return nil, err
+	}
+
+	peer := s.addPeer(conn)
+	return peer, nil
+}
+
+func (s *Server) ConnectAndSync(address string) {
+	peer, err := s.ConnectToPeer(address)
+	if err != nil {
+		return
+	}
+	if peer != nil {
+		s.SyncWithPeer(peer)
 	}
 }
 
@@ -312,10 +329,39 @@ func (s *Server) connectPersistedPeers() {
 		s.lock.RUnlock()
 		return
 	}
-	peers := append([]string(nil), s.config.Peers...)
+	peersToConnect := append([]string(nil), s.config.Peers...)
 	s.lock.RUnlock()
-	for _, endpoint := range peers {
-		go s.ConnectToPeer(endpoint)
+
+	var connectedPeers []*Peer
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// Phase 1: Connect to all peers
+	fmt.Println("Connecting to all persisted peers...")
+	for _, endpoint := range peersToConnect {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			peer, err := s.ConnectToPeer(addr)
+			if err != nil {
+				return // Error already logged
+			}
+			if peer != nil {
+				mu.Lock()
+				connectedPeers = append(connectedPeers, peer)
+				mu.Unlock()
+			}
+		}(endpoint)
+	}
+
+	wg.Wait()
+
+	// Phase 2: Sync with all successfully connected peers
+	if len(connectedPeers) > 0 {
+		fmt.Printf("All %d connection attempts finished. Starting synchronization...\n", len(connectedPeers))
+		for _, peer := range connectedPeers {
+			go s.SyncWithPeer(peer)
+		}
 	}
 }
 

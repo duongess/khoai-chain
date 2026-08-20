@@ -7,6 +7,7 @@ type StateContext interface {
 	PutState(key []byte, value []byte) error
 	GetState(key []byte) ([]byte, error)
 	GetSender() []byte
+	GetPermission() string
 }
 
 // SmartContract

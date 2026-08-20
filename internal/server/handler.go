@@ -109,7 +109,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgSendChain:
 		var resp SendBlocksRequest
 		if err := json.Unmarshal(payload, &resp); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
 		}
 
 		fmt.Printf("Received %d blocks for synchronization...\n", len(resp.Blocks))
@@ -121,7 +122,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgGetChain:
 		var req GetBlocksRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
 		}
 		if peer != nil && !peer.registered && req.Sender != "" && req.Sender != s.Endpoint {
 			peer.Endpoint = req.Sender
@@ -155,7 +157,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgIDENTITY:
 		var msg CommandIDENTITY
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
 		}
 		core.PublicKeyPeers[msg.PublicKey] = msg.Permission
 
@@ -165,10 +168,16 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgNonce:
 		var msg CommandNonce
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			return nil, err
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
 		}
 
-		core.NM.GenerateChallenge(msg.Sender)
+		var nonce, err = core.NM.GenerateChallenge(msg.Sender)
+		if err != nil {
+			json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
+		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

@@ -22,8 +22,8 @@ type IdentityMessage struct {
 	Permission string
 }
 
-var publicKeyNode []byte
-var permissionNode string
+var PublicKeyNode []byte
+var PermissionNode string
 var PublicKeyPeers = make(map[string]string)
 
 // GenerateIdentity tao ra mot cap khoa moi bang Ed25519
@@ -51,10 +51,10 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 		return fmt.Errorf("error decoding public key: %w", err)
 	}
 
-	publicKeyNode = pubBytes
-	permissionNode = permissionConf
+	PublicKeyNode = pubBytes
+	PermissionNode = permissionConf
 
-	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(publicKeyNode), permissionNode)
+	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(PublicKeyNode), PermissionNode)
 
 	return nil
 
@@ -63,8 +63,8 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 func GetIdentityMessage() *IdentityMessage {
 	return &IdentityMessage{
 		Type:       "IDENTITY",
-		PublicKey:  publicKeyNode,
-		Permission: permissionNode,
+		PublicKey:  PublicKeyNode,
+		Permission: PermissionNode,
 	}
 }
 

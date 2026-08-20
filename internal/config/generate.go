@@ -327,7 +327,7 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, cfg.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -433,7 +433,7 @@ func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org 
 	}
 
 	// Generate the main.go file specific to this node's chaincodes
-	if err := generateMainFile(nodeDir, cfg.Chaincodes); err != nil {
+	if err := generateMainFile(nodeDir); err != nil {
 		return fmt.Errorf("error generating main.go: %v", err)
 	}
 
@@ -675,7 +675,7 @@ services:
 }
 
 // Generate main file
-func generateMainFile(outputDir string, chaincodes []ChaincodeConfig) error {
+func generateMainFile(outputDir string) error {
 
 	mainTmpl := `package main
 
@@ -723,6 +723,10 @@ func main() {
 	defer db.Close()
 
 	// 3. Initialize Blockchain
+	if core.LoadIdentity(conf.IdentityPath, conf.Permission) == nil {
+		os.Exit(1)
+	}
+
 	chain := core.InitBlockchain(db)
 
 	// 4. Initialize Smart Contract Manager

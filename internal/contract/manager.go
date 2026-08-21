@@ -87,19 +87,19 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error, error) {
+func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, *core.Transaction, error, error) {
 	result, errContract, err := cm.ExecuteOnly(sender, contractName, method, args)
 	if err != nil {
-		return nil, errContract, err
+		return nil, nil, errContract, err
 	}
 
 	tx := core.NewTransaction(sender, contractName, method, args, time.Now().UnixNano())
 	_, err = cm.AddAndCheckMine(tx)
 	if err != nil {
-		return nil, errContract, err
+		return nil, nil, errContract, err
 	}
 
-	return result, errContract, nil
+	return result, tx, errContract, nil
 }
 
 func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, error) {

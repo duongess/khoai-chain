@@ -31,7 +31,7 @@ func HandleBlocknByte(msg CommandNewBlock) []byte {
 	return data
 }
 
-func HandleBlockSend(newBlock *core.Block) (CommandNewBlock, error) {
+func HandleBlockSend(newBlock *core.Block) CommandNewBlock {
 
 	var blockMsg = CommandNewBlock{
 		Type:      MsgNewBlock,
@@ -44,13 +44,13 @@ func HandleBlockSend(newBlock *core.Block) (CommandNewBlock, error) {
 	temp.Signature = ""
 	data, err := json.Marshal(temp)
 	if err != nil {
-		return CommandNewBlock{}, err
+		return CommandNewBlock{}
 	}
 
 	sig := ed25519.Sign(core.PrivateKeyNode, data)
 	blockMsg.Signature = hex.EncodeToString(sig)
 
-	return blockMsg, nil
+	return blockMsg
 }
 
 // genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.
@@ -123,7 +123,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		// Call Contract
-		result, errContract, err := manager.Execute(
+		result, tx, errContract, err := manager.Execute(
 			[]byte(msg.Sender),
 			[]byte(msg.Contract),
 			[]byte(msg.Function),
@@ -138,6 +138,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
 		}
+		s.BroadcastNewTransaction(tx)
 
 		return json.Marshal(resp)
 

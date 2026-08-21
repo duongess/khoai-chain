@@ -18,7 +18,7 @@ type Identity struct {
 
 type IdentityMessage struct {
 	Type       string
-	PublicKey  []byte
+	PublicKey  string
 	Permission string
 }
 
@@ -64,7 +64,7 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 func GetIdentityMessage() *IdentityMessage {
 	return &IdentityMessage{
 		Type:       "IDENTITY",
-		PublicKey:  PublicKeyNode,
+		PublicKey:  string(PublicKeyNode),
 		Permission: PermissionNode,
 	}
 }

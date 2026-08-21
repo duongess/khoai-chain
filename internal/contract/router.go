@@ -53,16 +53,17 @@ func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][
 	results := method.Call(inputArgs)
 
 	// 5. Process the return results
+	var resBytes []byte
+	var err error
+
 	if len(results) == 1 {
-		if !results[0].IsNil() {
-			if err, ok := results[0].Interface().(error); ok {
-				return nil, err
+		if results[0].IsValid() && !results[0].IsZero() {
+			if e, ok := results[0].Interface().(error); ok {
+				err = e
 			}
 		}
-		return nil, nil
 	} else if len(results) >= 2 {
-		var resBytes []byte
-		if !results[0].IsNil() {
+		if results[0].IsValid() && !results[0].IsZero() {
 			switch v := results[0].Interface().(type) {
 			case []byte:
 				resBytes = v
@@ -70,17 +71,17 @@ func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][
 				resBytes = []byte(v)
 			case []string:
 				resBytes, _ = json.Marshal(v)
+			default:
+				resBytes, _ = json.Marshal(v)
 			}
 		}
 
-		var err error
-		if !results[1].IsNil() {
+		if results[1].IsValid() && !results[1].IsZero() {
 			if e, ok := results[1].Interface().(error); ok {
 				err = e
 			}
 		}
-		return resBytes, err
 	}
 
-	return nil, nil
+	return resBytes, err
 }

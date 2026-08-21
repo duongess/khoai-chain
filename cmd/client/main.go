@@ -42,8 +42,8 @@ func main() {
 
 	// Nhap truc tiep Hex string cua Private Key va Public Key de test
 	// Vi du: tao cap khoa Ed25519 va dien vao day
-	privKeyHex := "105daa375f69aca1a4750da1cda05cfd996218333968a4a827360a5cb6dae6ed9737530538514654c8e3f650b0c02c9535e61d33958e25b65e3a5b5a0506c010"
-	pubKeyHex := "9737530538514654c8e3f650b0c02c9535e61d33958e25b65e3a5b5a0506c010"
+	privKeyHex := "0f350354217b4cb3b06fd1e608f629bdb0dc4901f03dc44aaf1bef2a2d6d3fa7a9822b153498495009f5f44097e32338968681b02e7332b85326926df07bfa57"
+	pubKeyHex := "a9822b153498495009f5f44097e32338968681b02e7332b85326926df07bfa57"
 
 	privBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {

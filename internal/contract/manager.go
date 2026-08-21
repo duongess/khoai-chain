@@ -49,16 +49,16 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
+func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args [][]byte) ([]byte, error, error) {
 	cm.currentSender = sender
 	cm.permission = core.PublicKeyPeers[string(sender)]
 
 	if cm.permission == "" {
-		return nil, fmt.Errorf("permission does not exist")
+		return nil, nil, fmt.Errorf("permission does not exist")
 	}
 	app, exists := sdk.GlobalRegistry[string(contractName)]
 	if !exists {
-		return nil, fmt.Errorf("contract '%s' is not installed", contractName)
+		return nil, nil, fmt.Errorf("contract '%s' is not installed", contractName)
 	}
 	app.SetContext(cm)
 
@@ -67,19 +67,19 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
-	result, err := cm.ExecuteOnly(sender, contractName, method, args)
+func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error, error) {
+	result, errContract, err := cm.ExecuteOnly(sender, contractName, method, args)
 	if err != nil {
-		return nil, err
+		return nil, errContract, err
 	}
 
 	tx := core.NewTransaction(sender, contractName, method, args, time.Now().UnixNano())
 	_, err = cm.AddAndCheckMine(tx)
 	if err != nil {
-		return nil, err
+		return nil, errContract, err
 	}
 
-	return result, nil
+	return result, errContract, nil
 }
 
 func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, error) {

@@ -123,7 +123,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		// Call Contract
-		result, err := manager.Execute(
+		result, errContract, err := manager.Execute(
 			[]byte(msg.Sender),
 			[]byte(msg.Contract),
 			[]byte(msg.Function),
@@ -133,6 +133,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		var resp ResponseMessage
 		if err != nil {
 			resp = ResponseMessage{Status: "Error", Error: err.Error()}
+		} else if errContract != nil {
+			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
 		}
@@ -273,7 +275,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		for _, transaction := range msg.Block.Transactions {
-			_, err := manager.ExecuteOnly(
+			_, _, err := manager.ExecuteOnly(
 				[]byte(transaction.Sender),
 				[]byte(transaction.Payload.Contract),
 				[]byte(transaction.Payload.Function),

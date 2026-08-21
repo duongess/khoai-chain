@@ -52,6 +52,10 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 	// 1. Find App
 	cm.currentSender = sender
 	cm.permission = core.PublicKeyPeers[string(sender)]
+
+	if cm.permission == "" {
+		return nil, fmt.Errorf("permission does not exist")
+	}
 	app, exists := sdk.GlobalRegistry[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' is not installed", contractName)

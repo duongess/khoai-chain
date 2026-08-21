@@ -38,12 +38,12 @@ func BuildMessageBytes(msg CommandMessage) []byte {
 }
 
 func main() {
-	serverAddress := "0.0.0.0:8080"
+	serverAddress := "0.0.0.0:8083"
 
 	// Nhap truc tiep Hex string cua Private Key va Public Key de test
 	// Vi du: tao cap khoa Ed25519 va dien vao day
-	privKeyHex := "0f350354217b4cb3b06fd1e608f629bdb0dc4901f03dc44aaf1bef2a2d6d3fa7a9822b153498495009f5f44097e32338968681b02e7332b85326926df07bfa57"
-	pubKeyHex := "a9822b153498495009f5f44097e32338968681b02e7332b85326926df07bfa57"
+	privKeyHex := "61b688632d012222b44c5844b7b903de64f5b9bc19cdca045de84af93b5c1223ae6e8497c5cfae84beefe759e4f029a6f8f5376aeb7b24fa1ca49c48bb8f487f"
+	pubKeyHex := "ae6e8497c5cfae84beefe759e4f029a6f8f5376aeb7b24fa1ca49c48bb8f487f"
 
 	privBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {

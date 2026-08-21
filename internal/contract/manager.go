@@ -51,7 +51,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
 	// 1. Find App
 	cm.currentSender = sender
-	cm.permission = core.PermissionNode
+	cm.permission = core.PublicKeyPeers[string(sender)]
 	app, exists := sdk.GlobalRegistry[string(contractName)]
 	if !exists {
 		return nil, fmt.Errorf("contract '%s' is not installed", contractName)

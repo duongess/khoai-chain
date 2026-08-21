@@ -53,6 +53,7 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 
 	PublicKeyNode = pubBytes
 	PermissionNode = permissionConf
+	PublicKeyPeers[string(PublicKeyNode)] = PermissionNode
 
 	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(PublicKeyNode), PermissionNode)
 

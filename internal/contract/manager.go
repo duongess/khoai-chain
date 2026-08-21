@@ -16,6 +16,7 @@ type ContractManager struct {
 	permission    string
 
 	OnBlockMined func(block *core.Block)
+	stagingState map[string][]byte
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -26,12 +27,15 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 	}
 }
 
-func (cm *ContractManager) PutState(key []byte, value []byte) error {
-	return cm.Chain.DB.SetData(key, value)
+func (cm *ContractManager) PutState(key string, value []byte) {
+	cm.stagingState[key] = value
 }
 
-func (cm *ContractManager) GetState(key []byte) ([]byte, error) {
-	return cm.Chain.DB.GetData(key)
+func (cm *ContractManager) GetState(key string) ([]byte, error) {
+	if val, ok := cm.stagingState[key]; ok {
+		return val, nil
+	}
+	return cm.Chain.DB.GetData([]byte(key))
 }
 
 func (cm *ContractManager) GetSender() []byte {
@@ -50,6 +54,8 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 }
 
 func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args [][]byte) ([]byte, error, error) {
+	cm.stagingState = make(map[string][]byte)
+
 	cm.currentSender = sender
 	cm.permission = core.PublicKeyPeers[string(sender)]
 
@@ -62,8 +68,17 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args
 	}
 	app.SetContext(cm)
 
-	// Chỉ chạy logic contract để thay đổi State DB, không tạo tx, không mine block
-	return cm.router.CallMethod(app, sender, method, args)
+	var result, errContract, err = cm.router.CallMethod(app, sender, method, args)
+	if err != nil {
+		cm.stagingState = nil
+		return nil, nil, err
+	}
+
+	for k, v := range cm.stagingState {
+		cm.Chain.DB.SetData([]byte(k), v)
+	}
+
+	return result, errContract, err
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block

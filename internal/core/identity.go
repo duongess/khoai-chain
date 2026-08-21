@@ -17,9 +17,9 @@ type Identity struct {
 }
 
 type IdentityMessage struct {
-	Type       string
-	PublicKey  string
-	Permission string
+	Type       string `json:"type"`
+	PublicKey  string `json:"public_key"`
+	Permission string `json:"permission"`
 }
 
 var PublicKeyNode []byte
@@ -53,7 +53,7 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 
 	PublicKeyNode = pubBytes
 	PermissionNode = permissionConf
-	PublicKeyPeers[string(PublicKeyNode)] = PermissionNode
+	PublicKeyPeers[hex.EncodeToString(PublicKeyNode)] = PermissionNode
 
 	fmt.Printf("Public key: %s, have permission %s\n", hex.EncodeToString(PublicKeyNode), PermissionNode)
 
@@ -64,7 +64,7 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 func GetIdentityMessage() *IdentityMessage {
 	return &IdentityMessage{
 		Type:       "IDENTITY",
-		PublicKey:  string(PublicKeyNode),
+		PublicKey:  hex.EncodeToString(PublicKeyNode),
 		Permission: PermissionNode,
 	}
 }

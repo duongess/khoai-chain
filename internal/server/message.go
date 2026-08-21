@@ -3,12 +3,13 @@ package server
 import "khoai-chain/internal/core"
 
 const (
-	MsgExecute   = "EXECUTE"    // Client sends command
-	MsgNewBlock  = "NEW_BLOCK"  // Case 2: Send if there's a new block
-	MsgGetChain  = "GET_CHAIN"  // Case 1: New peer requests data
-	MsgSendChain = "SEND_CHAIN" // Case 1: Old peer sends data
-	MsgIDENTITY  = "IDENTITY"
-	MsgNonce     = "NONCE"
+	MsgExecute     = "EXECUTE"    // Client sends command
+	MsgNewBlock    = "NEW_BLOCK"  // Case 2: Send if there's a new block
+	MsgGetChain    = "GET_CHAIN"  // Case 1: New peer requests data
+	MsgSendChain   = "SEND_CHAIN" // Case 1: Old peer sends data
+	MsgIDENTITY    = "IDENTITY"
+	MsgNonce       = "NONCE"
+	MsgTransaction = "TRANSACTION"
 )
 
 // Request gửi qua TCP
@@ -42,6 +43,19 @@ type CommandIDENTITY struct {
 type CommandNonce struct {
 	Type   string `json:"type"`
 	Sender string `json:"sender"`
+}
+
+type CommandNewBlock struct {
+	Type      string      `json:"type"`
+	Sender    string      `json:"sender"`
+	Block     *core.Block `json:"block"`
+	Signature string      `json:"signature"`
+}
+
+type CommandTransaction struct {
+	Type        string            `json:"type"`
+	Sender      string            `json:"sender"`
+	Transaction *core.Transaction `json:"transaction"`
 }
 
 // Response returned to Client

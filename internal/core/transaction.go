@@ -7,9 +7,12 @@ import (
 
 // 1. The "Payload" (The business content you want to send)
 type TxPayload struct {
-	Contract []byte   // e.g., "khoai-token"
-	Function []byte   // e.g., "transfer"
-	Args     [][]byte // e.g., ["nguyen-van-b", "100"]
+	Type     []byte   `json:"type"`
+	Sender   []byte   `json:"sender"`
+	Contract []byte   `json:"contract"`
+	Function []byte   `json:"function"`
+	Args     [][]byte `json:"args"`
+	Nonce    []byte   `json:"nonce"`
 }
 
 // 2. The "Wrapper" (The complete transaction package)

@@ -181,6 +181,14 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})
+	case MsgTransaction:
+		var msg CommandTransaction
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
+		}
+
+	case MsgNewBlock:
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

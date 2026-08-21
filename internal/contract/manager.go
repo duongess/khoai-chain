@@ -49,9 +49,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-// Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
-	// 1. Find App
+func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
 	cm.currentSender = sender
 	cm.permission = core.PublicKeyPeers[string(sender)]
 
@@ -64,31 +62,23 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 	}
 	app.SetContext(cm)
 
-	// 2. RUN LOGIC (Simulation)
-	result, err := cm.router.CallMethod(app, sender, method, args)
+	// Chỉ chạy logic contract để thay đổi State DB, không tạo tx, không mine block
+	return cm.router.CallMethod(app, sender, method, args)
+}
+
+// Execute: Run logic -> Create Tx -> Mine Block
+func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
+	result, err := cm.ExecuteOnly(sender, contractName, method, args)
 	if err != nil {
-		fmt.Println("Contract Error (Reverted):", err)
-		return nil, err // If there's an error, return immediately, don't save the transaction
+		return nil, err
 	}
 
-	// 3. IF SUCCESSFUL -> CREATE TRANSACTION (Package)
-	// (Assuming sender is AdminLocal - later get from Auth API)
-	tx := core.NewTransaction(
-		sender,
-		contractName,
-		method,
-		args,
-		time.Now().UnixNano(),
-	)
-
-	// 4. MINE BLOCK (Instant Mining)
-	fmt.Println("Packaging transaction...")
+	tx := core.NewTransaction(sender, contractName, method, args, time.Now().UnixNano())
 	_, err = cm.AddAndCheckMine(tx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Return the execution result of the Smart Contract
 	return result, nil
 }
 

@@ -24,6 +24,13 @@ func HandleTransactionByte(msg CommandTransaction) []byte {
 	return data
 }
 
+func HandleBlocknByte(msg CommandNewBlock) []byte {
+	temp := msg
+	temp.Signature = ""
+	data, _ := json.Marshal(temp)
+	return data
+}
+
 func HandleBlockSend(newBlock *core.Block) (CommandNewBlock, error) {
 
 	var blockMsg = CommandNewBlock{
@@ -237,7 +244,53 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}
 
+		return json.Marshal(ResponseMessage{Status: "Success"})
+
 	case MsgNewBlock:
+		var msg CommandNewBlock
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			return json.Marshal(resp)
+		}
+		pubKeyBytes, err := hex.DecodeString(msg.Sender)
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+		}
+
+		if len(pubKeyBytes) != ed25519.PublicKeySize {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+		}
+
+		sigBytes, err := hex.DecodeString(string(msg.Signature))
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+		}
+
+		var messageBytes = HandleBlocknByte(msg)
+		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
+		for _, transaction := range msg.Block.Transactions {
+			_, err := manager.ExecuteOnly(
+				[]byte(transaction.Sender),
+				[]byte(transaction.Payload.Contract),
+				[]byte(transaction.Payload.Function),
+				transaction.Payload.Args,
+			)
+			if err != nil {
+				errResp := ResponseMessage{
+					Status: "Error",
+					Error:  fmt.Sprintf("error transaction '%x': %s", transaction.ID, err),
+				}
+				return json.Marshal(errResp)
+			}
+		}
+
+		manager.Chain.AddBlock(msg.Block)
+
+		return json.Marshal(ResponseMessage{Status: "Success"})
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

@@ -8,6 +8,8 @@ type StateContext interface {
 	GetState(key string) ([]byte, error)
 	GetSender() []byte
 	GetPermission() string
+
+	Commit() error
 }
 
 // SmartContract

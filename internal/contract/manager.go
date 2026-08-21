@@ -42,6 +42,15 @@ func (cm *ContractManager) GetSender() []byte {
 	return cm.currentSender
 }
 
+func (cm *ContractManager) Commit() error {
+	for k, v := range cm.stagingState {
+		var err = cm.Chain.DB.SetData([]byte(k), v)
+		return err
+	}
+
+	return nil
+}
+
 func (cm *ContractManager) GetPermission() string {
 	return cm.permission
 }
@@ -72,10 +81,6 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args
 	if err != nil {
 		cm.stagingState = nil
 		return nil, nil, err
-	}
-
-	for k, v := range cm.stagingState {
-		cm.Chain.DB.SetData([]byte(k), v)
 	}
 
 	return result, errContract, err

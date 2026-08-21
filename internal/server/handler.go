@@ -290,6 +290,12 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			}
 		}
 
+		err = manager.Commit()
+
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
 		manager.Chain.AddBlock(msg.Block)
 
 		return json.Marshal(ResponseMessage{Status: "Success"})

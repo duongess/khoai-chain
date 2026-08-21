@@ -54,11 +54,11 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 
 	privPath := filepath.Join(keyDir, "private.key")
 	privHex, err := os.ReadFile(privPath)
-	if err == nil {
-		privBytes, _ := hex.DecodeString(string(privHex))
-		PrivateKeyNode = privBytes
+	if err != nil {
+		return fmt.Errorf("error decoding private key: %w", err)
 	}
 
+	PrivateKeyNode = privHex
 	PublicKeyNode = pubBytes
 	PermissionNode = permissionConf
 	PublicKeyPeers[hex.EncodeToString(PublicKeyNode)] = PermissionNode

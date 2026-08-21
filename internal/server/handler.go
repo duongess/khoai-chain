@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core" // Import để dùng struct Block nếu cần
+	"time"
 )
 
 // BuildMessageBytes prepares the payload for signing and verification by omitting the signature field.
@@ -21,6 +22,28 @@ func HandleTransactionByte(msg CommandTransaction) []byte {
 	temp := msg.Transaction.Payload
 	data, _ := json.Marshal(temp)
 	return data
+}
+
+func HandleBlockSend(newBlock *core.Block) (CommandNewBlock, error) {
+
+	var blockMsg = CommandNewBlock{
+		Type:      MsgNewBlock,
+		Sender:    hex.EncodeToString(core.PublicKeyNode),
+		Timestamp: time.Now().UnixNano(),
+		Block:     newBlock,
+	}
+
+	temp := blockMsg
+	temp.Signature = ""
+	data, err := json.Marshal(temp)
+	if err != nil {
+		return CommandNewBlock{}, err
+	}
+
+	sig := ed25519.Sign(core.PrivateKeyNode, data)
+	blockMsg.Signature = hex.EncodeToString(sig)
+
+	return blockMsg, nil
 }
 
 // genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.

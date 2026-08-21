@@ -48,6 +48,7 @@ type CommandNonce struct {
 type CommandNewBlock struct {
 	Type      string      `json:"type"`
 	Sender    string      `json:"sender"`
+	Timestamp int64       `json:"timestamp"`
 	Block     *core.Block `json:"block"`
 	Signature string      `json:"signature"`
 }

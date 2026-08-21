@@ -422,7 +422,12 @@ func (s *Server) removePersistedPeer(endpoint string) {
 }
 
 func (s *Server) BroadcastNewBlock(newBlock *core.Block) {
+	var blockMsg, err = HandleBlockSend(newBlock)
+	if err != nil {
 
+	}
+	msgBytes, _ := json.Marshal(blockMsg)
+	s.Broadcast(string(msgBytes))
 }
 
 func (s *Server) Broadcast(msg string) {

@@ -14,6 +14,8 @@ type ContractManager struct {
 	Mempool       *core.Mempool
 	currentSender []byte
 	permission    string
+
+	OnBlockMined func(block *core.Block)
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -81,6 +83,16 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 
 	// 4. MINE BLOCK (Instant Mining)
 	fmt.Println("Packaging transaction...")
+	_, err = cm.AddAndCheckMine(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return the execution result of the Smart Contract
+	return result, nil
+}
+
+func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, error) {
 	txsToMine, ready := cm.Mempool.Add(tx)
 	if ready {
 		fmt.Printf("10 transactions reached -> Activating BLOCK MINING!\n")
@@ -88,8 +100,11 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 		if newBlock == nil {
 			return nil, fmt.Errorf("error mining block")
 		}
-	}
 
-	// Return the execution result of the Smart Contract
-	return result, nil
+		if cm.OnBlockMined != nil {
+			cm.OnBlockMined(newBlock)
+		}
+		return newBlock, nil
+	}
+	return nil, nil
 }

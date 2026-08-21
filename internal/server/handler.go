@@ -9,16 +9,16 @@ import (
 	"khoai-chain/internal/core" // Import để dùng struct Block nếu cần
 )
 
-// This function returns ([]byte, error).
-// []byte is the JSON data ALREADY PACKAGED to send back to the other party.
-func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager) ([]byte, error) {
-	return handleMessage(payload, s, manager, nil)
-}
-
 // BuildMessageBytes prepares the payload for signing and verification by omitting the signature field.
 func BuildMessageBytes(msg CommandMessage) []byte {
 	temp := msg
 	temp.Signature = ""
+	data, _ := json.Marshal(temp)
+	return data
+}
+
+func HandleTransactionByte(msg CommandTransaction) []byte {
+	temp := msg.Transaction.Payload
 	data, _ := json.Marshal(temp)
 	return data
 }
@@ -181,11 +181,37 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})
+
 	case MsgTransaction:
 		var msg CommandTransaction
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
 			return json.Marshal(resp)
+		}
+		pubKeyBytes, err := hex.DecodeString(msg.Sender)
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+		}
+
+		if len(pubKeyBytes) != ed25519.PublicKeySize {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+		}
+
+		sigBytes, err := hex.DecodeString(string(msg.Transaction.Signature))
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+		}
+
+		messageBytes := HandleTransactionByte(msg)
+
+		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
+		_, err = manager.AddAndCheckMine(msg.Transaction)
+		if err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 		}
 
 	case MsgNewBlock:

@@ -36,6 +36,9 @@ func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 		httpMux:      http.NewServeMux(),
 	}
 	s.registerHTTPEndpoints()
+	contracts.OnBlockMined = func(newBlock *core.Block) {
+		s.BroadcastNewBlock(newBlock)
+	}
 	return s
 }
 
@@ -416,6 +419,10 @@ func (s *Server) removePersistedPeer(endpoint string) {
 	if err := config.SaveConfig(s.configPath, s.config); err != nil {
 		fmt.Printf("Could not remove persisted peer %s: %v\n", endpoint, err)
 	}
+}
+
+func (s *Server) BroadcastNewBlock(newBlock *core.Block) {
+
 }
 
 func (s *Server) Broadcast(msg string) {

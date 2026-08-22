@@ -12,7 +12,7 @@ type ContractManager struct {
 	router        *Router // Add router
 	Chain         *core.Blockchain
 	Mempool       *core.Mempool
-	currentSender []byte
+	currentSender string
 	permission    string
 
 	OnBlockMined func(block *core.Block)
@@ -38,7 +38,7 @@ func (cm *ContractManager) GetState(key string) ([]byte, error) {
 	return cm.Chain.DB.GetData([]byte(key))
 }
 
-func (cm *ContractManager) GetSender() []byte {
+func (cm *ContractManager) GetSender() string {
 	return cm.currentSender
 }
 
@@ -62,7 +62,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args [][]byte) ([]byte, error, error) {
+func (cm *ContractManager) ExecuteOnly(sender, contractName, method string, args []string) ([]byte, error, error) {
 	cm.stagingState = make(map[string][]byte)
 
 	cm.currentSender = sender
@@ -87,7 +87,7 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method []byte, args
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, *core.Transaction, error, error) {
+func (cm *ContractManager) Execute(sender, contractName, method string, args []string) ([]byte, *core.Transaction, error, error) {
 	result, errContract, err := cm.ExecuteOnly(sender, contractName, method, args)
 	if err != nil {
 		return nil, nil, errContract, err

@@ -7,26 +7,26 @@ import (
 
 // 1. The "Payload" (The business content you want to send)
 type TxPayload struct {
-	Type     []byte   `json:"type"`
-	Sender   []byte   `json:"sender"`
-	Contract []byte   `json:"contract"`
-	Function []byte   `json:"function"`
-	Args     [][]byte `json:"args"`
-	Nonce    []byte   `json:"nonce"`
+	Type     string   `json:"type"`
+	Sender   string   `json:"sender"`
+	Contract string   `json:"contract"`
+	Function string   `json:"function"`
+	Args     []string `json:"args"`
+	Nonce    string   `json:"nonce"`
 }
 
 // 2. The "Wrapper" (The complete transaction package)
 type Transaction struct {
-	ID        []byte // Hash of the transaction (TxHash)
+	ID        string // Hash of the transaction (TxHash)
 	Timestamp int64  // Creation time
-	Sender    []byte // Sender's Public Key (To verify the signature)
-	Signature []byte // Digital signature (To prove ownership)
+	Sender    string // Sender's Public Key (To verify the signature)
+	Signature string // Digital signature (To prove ownership)
 
 	Payload TxPayload // Put the payload here
 }
 
 // 3. Quick Transaction creation function (Helper/Constructor)
-func NewTransaction(sender, contract, function []byte, args [][]byte, timestamp int64) *Transaction {
+func NewTransaction(sender, contract, function string, args []string, timestamp int64) *Transaction {
 	tx := &Transaction{
 		Timestamp: timestamp,
 		Sender:    sender,
@@ -40,9 +40,9 @@ func NewTransaction(sender, contract, function []byte, args [][]byte, timestamp 
 	return tx
 }
 
-func (tx *Transaction) Hash() []byte {
+func (tx *Transaction) Hash() string {
 	// Simplified: Hash sender + timestamp + contract
 	data := fmt.Sprintf("%s%d%s%s", tx.Sender, tx.Timestamp, tx.Payload.Contract, tx.Payload.Function)
 	hash := sha256.Sum256([]byte(data))
-	return hash[:]
+	return string(hash[:])
 }

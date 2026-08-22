@@ -6,7 +6,7 @@ var GlobalRegistry = make(map[string]SmartContract)
 type StateContext interface {
 	PutState(key string, value []byte)
 	GetState(key string) ([]byte, error)
-	GetSender() []byte
+	GetSender() string
 	GetPermission() string
 
 	Commit() error

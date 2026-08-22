@@ -99,11 +99,6 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(resp)
 		}
 
-		var argsBytes [][]byte
-		for _, arg := range msg.Args {
-			argsBytes = append(argsBytes, []byte(arg))
-		}
-
 		err := core.NM.VerifyAndConsume(msg.Sender, msg.Nonce)
 		if err != nil {
 			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
@@ -132,10 +127,10 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		// Call Contract
 		result, tx, errContract, err := manager.Execute(
-			[]byte(msg.Sender),
-			[]byte(msg.Contract),
-			[]byte(msg.Function),
-			argsBytes,
+			msg.Sender,
+			msg.Contract,
+			msg.Function,
+			msg.Args,
 		)
 
 		var resp ResponseMessage
@@ -145,7 +140,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
-			tx.Signature = []byte(msg.Signature)
+			tx.Signature = msg.Signature
 			s.BroadcastNewTransaction(tx)
 		}
 
@@ -286,9 +281,9 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		for _, transaction := range msg.Block.Transactions {
 			_, _, err := manager.ExecuteOnly(
-				[]byte(transaction.Sender),
-				[]byte(transaction.Payload.Contract),
-				[]byte(transaction.Payload.Function),
+				transaction.Sender,
+				transaction.Payload.Contract,
+				transaction.Payload.Function,
 				transaction.Payload.Args,
 			)
 			if err != nil {

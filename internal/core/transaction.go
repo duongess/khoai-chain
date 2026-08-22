@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -35,8 +36,8 @@ func NewTransaction(payload TxPayload, timestamp int64) *Transaction {
 }
 
 func (tx *Transaction) Hash() string {
-	// Simplified: Hash sender + timestamp + contract
 	data := fmt.Sprintf("%s%d%s%s", tx.Payload.Sender, tx.Timestamp, tx.Payload.Contract, tx.Payload.Function)
-	hash := sha256.Sum256([]byte(data))
-	return string(hash[:])
+	hashBytes := sha256.Sum256([]byte(data))
+
+	return hex.EncodeToString(hashBytes[:])
 }

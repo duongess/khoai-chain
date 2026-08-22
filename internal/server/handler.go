@@ -145,6 +145,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
+			tx.Signature = []byte(msg.Signature)
 			s.BroadcastNewTransaction(tx)
 		}
 

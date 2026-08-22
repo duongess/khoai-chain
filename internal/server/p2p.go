@@ -25,6 +25,7 @@ type Server struct {
 	configPath         string
 	httpMux            *http.ServeMux
 	PendingJoins       map[string]time.Time // map[source_endpoint] -> expiration_time
+	stopCh             chan struct{}
 }
 
 func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
@@ -34,6 +35,7 @@ func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 		PendingJoins: make(map[string]time.Time),
 		Contracts:    contracts,
 		httpMux:      http.NewServeMux(),
+		stopCh:       make(chan struct{}),
 	}
 	s.registerHTTPEndpoints()
 	contracts.OnBlockMined = func(newBlock *core.Block) {
@@ -103,6 +105,13 @@ func (s *Server) Stop() {
 	fmt.Println("Stopping server and disconnecting all peers...")
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	select {
+	case <-s.stopCh:
+		// already closed
+	default:
+		close(s.stopCh)
+	}
 
 	for _, peer := range s.Peers {
 		peer.Conn.Close()
@@ -355,39 +364,59 @@ func (s *Server) connectPersistedPeers() {
 	peersToConnect := append([]string(nil), s.config.Peers...)
 	s.lock.RUnlock()
 
-	var connectedPeers []*Peer
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	// Phase 1: Connect to all peers
-	fmt.Println("Connecting to all persisted peers...")
+	fmt.Println("Connecting to all persisted peers (with retry)...")
 	for _, endpoint := range peersToConnect {
-		wg.Add(1)
-		go func(addr string) {
-			defer wg.Done()
-			peer, err := s.ConnectToPeer(addr)
-			if err != nil {
-				return // Error already logged
-			}
-			if peer != nil {
-				mu.Lock()
-				connectedPeers = append(connectedPeers, peer)
-				mu.Unlock()
-			}
-		}(endpoint)
+		go s.connectWithRetry(endpoint)
 	}
 
-	wg.Wait()
+	// Send identity once, after giving initial connection attempts a head start.
+	// Late-joining peers still get it via retry-triggered sync below, and
+	// existing broadcast-on-new-tx flows carry permission info independently.
+	go s.sendIdentity()
+}
 
-	// Phase 2: Sync with all successfully connected peers
-	if len(connectedPeers) > 0 {
-		fmt.Printf("All %d connection attempts finished. Starting synchronization...\n", len(connectedPeers))
-		s.SyncWithAllPeers()
+// connectWithRetry dials endpoint repeatedly with exponential backoff until
+// it succeeds, the peer is already connected, or the server is stopping.
+// This handles the case where a peer hasn't opened its listener yet at
+// the moment we try to connect (e.g. simultaneous cluster startup).
+func (s *Server) connectWithRetry(endpoint string) {
+	const (
+		initialBackoff = 1 * time.Second
+		maxBackoff     = 30 * time.Second
+	)
+	backoff := initialBackoff
+
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		default:
+		}
+
+		if s.HasPeer(endpoint) || endpoint == s.Endpoint {
+			return
+		}
+
+		peer, err := s.ConnectToPeer(endpoint)
+		if err == nil && peer != nil {
+			fmt.Printf("Connected to persisted peer %s, starting sync...\n", endpoint)
+			if syncErr := s.SyncWithPeer(peer); syncErr != nil {
+				fmt.Printf("Initial sync with %s failed: %v\n", endpoint, syncErr)
+			}
+			return
+		}
+
+		select {
+		case <-s.stopCh:
+			return
+		case <-time.After(backoff):
+		}
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
 	}
-
-	// Phase 3: Send a hardcoded transaction after connecting and starting sync.
-	// This is run in a goroutine to avoid blocking the startup process.
-	s.sendIdentity()
 }
 
 func (s *Server) sendIdentity() {

@@ -124,7 +124,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		// Call Contract
-		result, tx, errContract, err := manager.Execute(msg.changeToTxPayload())
+		result, tx, minedBlock, errContract, err := manager.Execute(msg.changeToTxPayload())
 
 		var resp ResponseMessage
 		if err != nil {
@@ -133,7 +133,10 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
-			s.BroadcastNewTransaction(tx)
+			if minedBlock == nil {
+				// tx is still pending — gossip it so peers' mempools stay in sync
+				s.BroadcastNewTransaction(tx)
+			}
 		}
 
 		return json.Marshal(resp)
@@ -189,7 +192,6 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 		// Sau khi vượt qua mọi bài test, tiến hành Commit state và add từng block vào chuỗi an toàn
 		for _, block := range resp.Blocks {
-			// Kiểm tra xem block đã tồn tại trong chuỗi chưa để tránh trùng lặp
 			if manager.Chain.DB.HasKey([]byte(block.Hash)) {
 				continue
 			}
@@ -199,6 +201,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 			}
 			manager.Chain.AddBlock(block)
+			manager.Mempool.RemoveIncluded(block.Transactions)
 		}
 
 		fmt.Println("Synchronization completed successfully and chain updated!")
@@ -346,6 +349,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		manager.Chain.AddBlock(msg.Block)
+		manager.Mempool.RemoveIncluded(msg.Block.Transactions)
 
 		return json.Marshal(ResponseMessage{Status: "Success"})
 	}

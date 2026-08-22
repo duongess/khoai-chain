@@ -70,21 +70,27 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 	// 2. Create a new Block (Height incremented by 1)
 	newBlock := NewBlock(txs, bc.LastHash, lastBlock.Height+1)
 
-	// 3. Save the new Block to DB
+	// 3. Check if block already exists in DB to prevent duplicate mining
+	if bc.DB.HasKey([]byte(newBlock.Hash)) {
+		fmt.Println("Block already exists, skipping duplicate mine.")
+		return nil
+	}
+
+	// 4. Save the new Block to DB
 	err = bc.DB.SetData([]byte(newBlock.Hash), newBlock.Serialize())
 	if err != nil {
 		fmt.Println("Error saving new block:", err)
 		return nil
 	}
 
-	// 4. Update LastHash
+	// 5. Update LastHash
 	err = bc.DB.SetData([]byte(lastHashKey), []byte(newBlock.Hash))
 	if err != nil {
 		fmt.Println("Error updating LastHash:", err)
 		return nil
 	}
 
-	// 5. Update the struct in memory
+	// 6. Update the struct in memory
 	bc.LastHash = newBlock.Hash
 
 	fmt.Printf("Mined Block #%d [%x]\n", newBlock.Height, newBlock.Hash)
@@ -92,23 +98,27 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 }
 
 // AddBlock: This function is for P2P Sync (when receiving a Block from another peer)
-// Unlike MineBlock, this Block already has a Hash and data, it just needs to be saved
 func (bc *Blockchain) AddBlock(block *Block) {
-	// TODO: Add validation logic here
+	// 1. Check if block already exists to avoid duplication
+	if bc.DB.HasKey([]byte(block.Hash)) {
+		return
+	}
 
+	// 2. Save the block to database first
 	err := bc.DB.SetData([]byte(block.Hash), block.Serialize())
 	if err != nil {
 		fmt.Println("Error saving block from peer:", err)
 		return
 	}
 
-	// Check if this block is higher than our current block
-	// If it's higher, update LastHash (Longest Chain Rule)
-	lastBlock, _ := bc.GetBlock(bc.LastHash)
-	if block.Height > lastBlock.Height {
-		bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash))
-		bc.LastHash = block.Hash
-		fmt.Printf("Synced Block #%d from Peer\n", block.Height)
+	// 3. Check if this block strictly extends our chain with a higher height
+	lastBlock, err := bc.GetBlock(bc.LastHash)
+	if err == nil && block.Height > lastBlock.Height {
+		err = bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash))
+		if err == nil {
+			bc.LastHash = block.Hash
+			fmt.Printf("Synced Block #%d from Peer\n", block.Height)
+		}
 	}
 }
 

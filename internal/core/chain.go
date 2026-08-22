@@ -1,9 +1,11 @@
 package core
 
 import (
+	"encoding/hex"
 	"fmt"
 	"khoai-chain/internal/database"
 	"os"
+	"time"
 )
 
 const (
@@ -51,7 +53,7 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 			fmt.Println("Error reading LastHash:", err)
 			os.Exit(1)
 		}
-		lastHash = string(data)
+		lastHash = hex.EncodeToString(data)
 		fmt.Printf("Blockchain loaded. LastHash: %x\n", lastHash)
 	}
 
@@ -68,7 +70,7 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 	}
 
 	// 2. Create a new Block (Height incremented by 1)
-	newBlock := NewBlock(txs, bc.LastHash, lastBlock.Height+1)
+	newBlock := NewBlock(txs, bc.LastHash, time.Now().Unix(), lastBlock.Height+1)
 
 	// 3. Check if block already exists in DB to prevent duplicate mining
 	if bc.DB.HasKey([]byte(newBlock.Hash)) {

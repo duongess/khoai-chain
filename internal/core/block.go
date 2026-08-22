@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"time"
 )
 
 type Block struct {
@@ -17,9 +16,9 @@ type Block struct {
 	Height        int
 }
 
-func NewBlock(txs []*Transaction, prevBlockHash string, height int) *Block {
+func NewBlock(txs []*Transaction, prevBlockHash string, timestamp int64, height int) *Block {
 	block := &Block{
-		Timestamp:     time.Now().Unix(),
+		Timestamp:     timestamp,
 		Transactions:  txs,
 		PrevBlockHash: prevBlockHash,
 		Height:        height,
@@ -42,7 +41,7 @@ func NewGenesisBlock() *Block {
 
 	// Gọi hàm tạo transaction với payload mới
 	genesisTx := NewTransaction(genesisPayload, 0)
-	return NewBlock([]*Transaction{genesisTx}, "", 0)
+	return NewBlock([]*Transaction{genesisTx}, "", 0, 0)
 }
 
 func (b *Block) CalculateHash() string {

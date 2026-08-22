@@ -422,7 +422,8 @@ func (s *Server) removePersistedPeer(endpoint string) {
 }
 
 func (s *Server) BroadcastNewTransaction(transaction *core.Transaction) {
-	msgBytes, _ := json.Marshal(transaction)
+	var txMsg = HandleTransactionSend(transaction)
+	msgBytes, _ := json.Marshal(txMsg)
 	s.Broadcast(string(msgBytes))
 }
 

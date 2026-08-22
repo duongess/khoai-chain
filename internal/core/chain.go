@@ -53,7 +53,7 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 			fmt.Println("Error reading LastHash:", err)
 			os.Exit(1)
 		}
-		lastHash = hex.EncodeToString(data)
+		lastHash, _ := hex.DecodeString(string(data))
 		fmt.Printf("Blockchain loaded. LastHash: %x\n", lastHash)
 	}
 

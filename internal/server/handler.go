@@ -257,7 +257,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			return errorResponse(baseMsg.Type, fmt.Sprintf("[%s] invalid public key size: %d for sender '%s'", baseMsg.Type, len(pubKeyBytes), msg.Sender))
+			errMsg := fmt.Sprintf("[%s] invalid public key size: got %d bytes (sender: %s)", baseMsg.Type, len(pubKeyBytes), msg.Sender)
+			return json.Marshal(ResponseMessage{Status: "Error", Error: errMsg})
 		}
 
 		sigBytes, err := hex.DecodeString(msg.Signature)

@@ -141,14 +141,57 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgSendChain:
 		var resp SendBlocksRequest
 		if err := json.Unmarshal(payload, &resp); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for SEND_CHAIN"}
 			return json.Marshal(resp)
 		}
 
 		fmt.Printf("Received %d blocks for synchronization...\n", len(resp.Blocks))
-		for _, block := range resp.Blocks {
+		if len(resp.Blocks) == 0 {
+			return nil, nil
+		}
+
+		for i, block := range resp.Blocks {
+			if i > 0 {
+				prevBlock := resp.Blocks[i-1]
+				if block.PrevBlockHash != prevBlock.Hash {
+					return json.Marshal(ResponseMessage{Status: "Error", Error: "broken chain link during sync"})
+				}
+			}
+
+			for _, transaction := range block.Transactions {
+				if transaction.Payload.Type == "System" {
+					continue
+				}
+
+				pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
+				if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+					return errorResponse(baseMsg.Type, "invalid tx sender public key")
+				}
+
+				var messageBytes = HandleTransactionByte(transaction.Payload)
+				sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
+				err = core.VerifySignature(ed25519.PublicKey(pubKeyBytes), messageBytes, sigBytes)
+				if err != nil {
+					return errorResponse(baseMsg.Type, err.Error())
+				}
+
+				_, _, err = manager.ExecuteOnly(transaction.Payload)
+				if err != nil {
+					return json.Marshal(ResponseMessage{
+						Status: "Error",
+						Error:  fmt.Sprintf("invalid transaction in block: %s", err.Error()),
+					})
+				}
+			}
+
+			err := manager.Commit()
+			if err != nil {
+				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			}
+
 			manager.Chain.AddBlock(block)
 		}
+
 		return nil, nil
 
 	case MsgGetChain:

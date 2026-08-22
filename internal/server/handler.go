@@ -32,6 +32,11 @@ func HandleTransactionSend(transaction *core.Transaction) CommandTransaction {
 	}
 }
 
+func errorResponse(msgType string, format string, a ...interface{}) ([]byte, error) {
+	errMsg := fmt.Sprintf("[%s] %s", msgType, fmt.Sprintf(format, a...))
+	return json.Marshal(ResponseMessage{Status: "Error", Error: errMsg})
+}
+
 func HandleBlockSend(newBlock *core.Block) CommandNewBlock {
 
 	var blockMsg = CommandNewBlock{
@@ -88,34 +93,34 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgExecute:
 		var msg CommandExecute
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 
 		err := core.NM.VerifyAndConsume(msg.Sender, msg.Nonce)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		pubKeyBytes, err := hex.DecodeString(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+			return errorResponse(baseMsg.Type, "invalid public key format")
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+			return errorResponse(baseMsg.Type, "invalid public key size")
 		}
 
 		sigBytes, err := hex.DecodeString(msg.Signature)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+			return errorResponse(baseMsg.Type, "invalid signature format")
 		}
 
 		messageBytes := HandleTransactionByte(msg.changeToTxPayload())
 
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		// Call Contract
@@ -136,7 +141,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgSendChain:
 		var resp SendBlocksRequest
 		if err := json.Unmarshal(payload, &resp); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 
@@ -149,7 +154,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgGetChain:
 		var req GetBlocksRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		if peer != nil && !peer.registered && req.Sender != "" && req.Sender != s.Endpoint {
@@ -184,7 +189,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgIDENTITY:
 		var msg CommandIDENTITY
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		core.PublicKeyPeers[msg.PublicKey] = msg.Permission
@@ -195,13 +200,13 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgNonce:
 		var msg CommandNonce
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 
 		var nonce, err = core.NM.GenerateChallenge(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})
@@ -209,33 +214,33 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgTransaction:
 		var msg CommandTransaction
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		pubKeyBytes, err := hex.DecodeString(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+			return errorResponse(baseMsg.Type, "invalid public key format")
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+			return errorResponse(baseMsg.Type, "invalid public key size")
 		}
 
 		sigBytes, err := hex.DecodeString(msg.Transaction.Payload.Signature)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+			return errorResponse(baseMsg.Type, "invalid signature format")
 		}
 
 		messageBytes := HandleTransactionByte(msg.Transaction.Payload)
 
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		_, err = manager.AddAndCheckMine(msg.Transaction)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success"})
@@ -243,40 +248,40 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgNewBlock:
 		var msg CommandNewBlock
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		pubKeyBytes, err := hex.DecodeString(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+			return errorResponse(baseMsg.Type, fmt.Sprintf("[%s] invalid public key format: %s", baseMsg.Type, msg.Sender))
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+			return errorResponse(baseMsg.Type, fmt.Sprintf("[%s] invalid public key size: %d for sender '%s'", baseMsg.Type, len(pubKeyBytes), msg.Sender))
 		}
 
 		sigBytes, err := hex.DecodeString(msg.Signature)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+			return errorResponse(baseMsg.Type, "invalid signature format")
 		}
 
 		var messageBytes = HandleBlocknByte(msg)
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		for _, transaction := range msg.Block.Transactions {
 			pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
 			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-				return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid tx sender public key"})
+				return errorResponse(baseMsg.Type, "invalid tx sender public key")
 			}
 
 			var messageBytes = HandleTransactionByte(transaction.Payload)
 			sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
 			err = core.VerifySignature(ed25519.PublicKey(transaction.Payload.Sender), messageBytes, sigBytes)
 			if err != nil {
-				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+				return errorResponse(baseMsg.Type, err.Error())
 			}
 
 			_, _, err = manager.ExecuteOnly(transaction.Payload)
@@ -291,7 +296,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		err = manager.Commit()
 
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		manager.Chain.AddBlock(msg.Block)

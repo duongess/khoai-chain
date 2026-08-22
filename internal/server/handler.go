@@ -170,15 +170,15 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			s.registerPeer(peer)
 		}
 
-		var commonHash []byte // Find common point
+		var commonHash string // Find common point
 		for _, hash := range req.Hashes {
-			if manager.Chain.DB.HasKey(hash) {
+			if manager.Chain.DB.HasKey([]byte(hash)) {
 				commonHash = hash
 				break
 			}
 		}
 		var blocksToSend []*core.Block
-		if commonHash == nil {
+		if commonHash == "" {
 
 			// No common point found (Full Sync)
 			fmt.Println("No common point found (Full Sync)")

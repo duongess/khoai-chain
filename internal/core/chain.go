@@ -61,7 +61,7 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 // MineBlock: Packages transactions into a new block and adds it to the chain
 func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 	// 1. Get the last block to know its Hash and Height
-	lastBlock, err := bc.GetBlock([]byte(bc.LastHash))
+	lastBlock, err := bc.GetBlock(bc.LastHash)
 	if err != nil {
 		fmt.Println("Could not find the last block:", err)
 		return nil
@@ -104,7 +104,7 @@ func (bc *Blockchain) AddBlock(block *Block) {
 
 	// Check if this block is higher than our current block
 	// If it's higher, update LastHash (Longest Chain Rule)
-	lastBlock, _ := bc.GetBlock([]byte(bc.LastHash))
+	lastBlock, _ := bc.GetBlock(bc.LastHash)
 	if block.Height > lastBlock.Height {
 		bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash))
 		bc.LastHash = block.Hash
@@ -113,8 +113,8 @@ func (bc *Blockchain) AddBlock(block *Block) {
 }
 
 // GetBlock: Find a Block by its Hash
-func (bc *Blockchain) GetBlock(hash []byte) (*Block, error) {
-	data, err := bc.DB.GetData(hash)
+func (bc *Blockchain) GetBlock(hash string) (*Block, error) {
+	data, err := bc.DB.GetData([]byte(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (bc *Blockchain) GetBlock(hash []byte) (*Block, error) {
 
 // GetBestHeight: Get the current highest height (for P2P handshake)
 func (bc *Blockchain) GetBestHeight() int {
-	lastBlock, err := bc.GetBlock([]byte(bc.LastHash))
+	lastBlock, err := bc.GetBlock(bc.LastHash)
 	if err != nil {
 		return 0
 	}
@@ -131,17 +131,17 @@ func (bc *Blockchain) GetBestHeight() int {
 }
 
 // GetBlockHashes: Get all Hashes in the chain (to send to another peer on request)
-func (bc *Blockchain) GetBlockHashes() [][]byte {
-	var hashes [][]byte
+func (bc *Blockchain) GetBlockHashes() []string {
+	var hashes []string
 	currentHash := bc.LastHash
 
 	for {
-		block, err := bc.GetBlock([]byte(currentHash))
+		block, err := bc.GetBlock(currentHash)
 		if err != nil {
 			break
 		}
 
-		hashes = append(hashes, []byte(block.Hash))
+		hashes = append(hashes, block.Hash)
 
 		if len(block.PrevBlockHash) == 0 {
 			break // Reached Genesis Block
@@ -157,7 +157,7 @@ func (bc *Blockchain) GetAllBlock() []*Block {
 	currentHash := bc.LastHash
 
 	for {
-		block, err := bc.GetBlock([]byte(currentHash))
+		block, err := bc.GetBlock(currentHash)
 		if err != nil {
 			break
 		}
@@ -176,15 +176,15 @@ func (bc *Blockchain) GetAllBlock() []*Block {
 	return blocks
 }
 
-func (bc *Blockchain) GetBlockAfter(startHash []byte) []*Block {
+func (bc *Blockchain) GetBlockAfter(startHash string) []*Block {
 	var blocks []*Block
 	currentHash := bc.LastHash
 
 	for {
-		if string(currentHash) == string(startHash) {
+		if currentHash == startHash {
 			break
 		}
-		block, err := bc.GetBlock([]byte(currentHash))
+		block, err := bc.GetBlock(currentHash)
 		if err != nil {
 			break
 		}

@@ -26,7 +26,7 @@ type CommandMessage struct {
 type GetBlocksRequest struct {
 	Type   string   `json:"type"`
 	Sender string   `json:"sender,omitempty"`
-	Hashes [][]byte `json:"hashes"`
+	Hashes []string `json:"hashes"`
 }
 
 type SendBlocksRequest struct {

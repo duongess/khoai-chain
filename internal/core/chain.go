@@ -99,29 +99,116 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 	return newBlock
 }
 
-// AddBlock: This function is for P2P Sync (when receiving a Block from another peer)
-func (bc *Blockchain) AddBlock(block *Block) {
-	// 1. Check if block already exists to avoid duplication
+// AddBlock is for P2P Sync when receiving a single Block from another peer.
+// It only accepts blocks that directly extend the current tip — this
+// prevents a block from a different chain/genesis lineage from silently
+// being adopted and fragmenting the DB into disconnected branches.
+func (bc *Blockchain) AddBlock(block *Block) error {
 	if bc.DB.HasKey([]byte(block.Hash)) {
-		return
+		return nil // already have it
 	}
 
-	// 2. Save the block to database first
-	err := bc.DB.SetData([]byte(block.Hash), block.Serialize())
+	if block.PrevBlockHash != bc.LastHash {
+		return fmt.Errorf("rejected block %s: does not extend tip %s (prev=%s)",
+			block.Hash, bc.LastHash, block.PrevBlockHash)
+	}
+
+	if err := bc.DB.SetData([]byte(block.Hash), block.Serialize()); err != nil {
+		return fmt.Errorf("error saving block from peer: %w", err)
+	}
+
+	if err := bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash)); err != nil {
+		return fmt.Errorf("error updating LastHash: %w", err)
+	}
+
+	bc.LastHash = block.Hash
+	fmt.Printf("Synced Block #%d from Peer\n", block.Height)
+	return nil
+}
+
+// AddBlocks atomically validates and adopts a batch of blocks received
+// during sync. It requires the batch to form a contiguous chain, connect
+// to a block already present locally (a genuine common ancestor — not
+// just "any hash we happen to recognize"), and share the same genesis.
+// Nothing is written until the whole batch passes validation.
+func (bc *Blockchain) AddBlocks(blocks []*Block) error {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	localGenesis, err := bc.GenesisHash()
 	if err != nil {
-		fmt.Println("Error saving block from peer:", err)
-		return
+		return fmt.Errorf("could not determine local genesis: %w", err)
 	}
 
-	// 3. Check if this block strictly extends our chain with a higher height
-	lastBlock, err := bc.GetBlock(bc.LastHash)
-	if err == nil && block.Height > lastBlock.Height {
-		err = bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash))
-		if err == nil {
-			bc.LastHash = block.Hash
-			fmt.Printf("Synced Block #%d from Peer\n", block.Height)
+	// Internal continuity of the batch itself.
+	for i := 1; i < len(blocks); i++ {
+		if blocks[i].PrevBlockHash != blocks[i-1].Hash {
+			return fmt.Errorf("broken chain link in sync batch at index %d", i)
 		}
 	}
+
+	// The batch must attach to a block we actually have — i.e. a real
+	// common ancestor — not be a disjoint branch we're about to graft on.
+	first := blocks[0]
+	if !bc.DB.HasKey([]byte(first.PrevBlockHash)) && first.PrevBlockHash != "" {
+		return fmt.Errorf("batch does not connect to local chain: unknown ancestor %s", first.PrevBlockHash)
+	}
+
+	// Walk the batch back to ITS root to confirm shared genesis.
+	// If the batch's PrevBlockHash chain bottoms out locally rather than
+	// at "", fetch the local ancestor and continue the walk from there.
+	rootHash := first.PrevBlockHash
+	if rootHash != "" {
+		ancestor, err := bc.GetBlock(rootHash)
+		if err != nil {
+			return fmt.Errorf("could not load common ancestor %s: %w", rootHash, err)
+		}
+		for ancestor.PrevBlockHash != "" {
+			ancestor, err = bc.GetBlock(ancestor.PrevBlockHash)
+			if err != nil {
+				return fmt.Errorf("broken local chain while tracing genesis: %w", err)
+			}
+		}
+		if ancestor.Hash != localGenesis {
+			return fmt.Errorf("rejected sync batch: genesis mismatch (got %s, want %s)", ancestor.Hash, localGenesis)
+		}
+	}
+	// else: batch attaches at the root itself; first.Hash IS the genesis
+	// candidate, so it must equal our own genesis exactly.
+	if rootHash == "" && first.Hash != localGenesis {
+		return fmt.Errorf("rejected sync batch: foreign genesis %s (want %s)", first.Hash, localGenesis)
+	}
+
+	// All validated — commit.
+	newTip := bc.LastHash
+	newHeight := int64(-1)
+	if lb, err := bc.GetBlock(bc.LastHash); err == nil {
+		newHeight = int64(lb.Height)
+	}
+
+	for _, block := range blocks {
+		if bc.DB.HasKey([]byte(block.Hash)) {
+			continue
+		}
+		if err := bc.DB.SetData([]byte(block.Hash), block.Serialize()); err != nil {
+			return fmt.Errorf("error saving synced block %s: %w", block.Hash, err)
+		}
+		if int64(block.Height) > newHeight {
+			newTip = block.Hash
+			newHeight = int64(block.Height)
+		}
+	}
+
+	if newTip != bc.LastHash {
+		if err := bc.DB.SetData([]byte(lastHashKey), []byte(newTip)); err != nil {
+			return fmt.Errorf("error updating LastHash after sync: %w", err)
+		}
+		bc.LastHash = newTip
+	}
+
+	fmt.Printf("Synchronized %d blocks; tip now #%d [%s]\n", len(blocks), newHeight, newTip)
+	return nil
 }
 
 // GetBlock: Find a Block by its Hash
@@ -213,4 +300,18 @@ func (bc *Blockchain) GetBlockAfter(startHash string) []*Block {
 	}
 
 	return blocks
+}
+
+func (bc *Blockchain) GenesisHash() (string, error) {
+	hash := bc.LastHash
+	for {
+		block, err := bc.GetBlock(hash)
+		if err != nil {
+			return "", err
+		}
+		if block.PrevBlockHash == "" {
+			return block.Hash, nil
+		}
+		hash = block.PrevBlockHash
+	}
 }

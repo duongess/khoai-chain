@@ -190,17 +190,15 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			}
 		}
 
-		// Sau khi vượt qua mọi bài test, tiến hành Commit state và add từng block vào chuỗi an toàn
-		for _, block := range resp.Blocks {
-			if manager.Chain.DB.HasKey([]byte(block.Hash)) {
-				continue
-			}
+		if err := manager.Chain.AddBlocks(resp.Blocks); err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
 
-			err := manager.Commit()
-			if err != nil {
-				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
-			}
-			manager.Chain.AddBlock(block)
+		if err := manager.Commit(); err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "failed to commit contract states: " + err.Error()})
+		}
+
+		for _, block := range resp.Blocks {
 			manager.Mempool.RemoveIncluded(block.Transactions)
 		}
 
@@ -348,7 +346,9 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return errorResponse(baseMsg.Type, err.Error())
 		}
 
-		manager.Chain.AddBlock(msg.Block)
+		if err := manager.Chain.AddBlock(msg.Block); err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
 		manager.Mempool.RemoveIncluded(msg.Block.Transactions)
 
 		return json.Marshal(ResponseMessage{Status: "Success"})

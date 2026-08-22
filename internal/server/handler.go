@@ -34,7 +34,7 @@ func HandleBlocknByte(msg CommandNewBlock) []byte {
 func HandleTransactionSend(transaction *core.Transaction) CommandTransaction {
 	return CommandTransaction{
 		Type:        MsgTransaction,
-		Sender:      hex.EncodeToString(transaction.Sender),
+		Sender:      string(transaction.Sender),
 		Transaction: transaction,
 	}
 }

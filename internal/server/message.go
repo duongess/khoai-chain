@@ -10,6 +10,7 @@ const (
 	MsgIDENTITY    = "IDENTITY"
 	MsgNonce       = "NONCE"
 	MsgTransaction = "TRANSACTION"
+	MsgHeight      = "HEIGHT"
 )
 
 // Request gửi qua TCP
@@ -63,6 +64,10 @@ type CommandTransaction struct {
 	Type        string            `json:"type"`
 	Sender      string            `json:"sender"`
 	Transaction *core.Transaction `json:"transaction"`
+}
+
+type CommandHeight struct {
+	Type string `json:"type"`
 }
 
 // Response returned to Client

@@ -145,11 +145,12 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(resp)
 		}
 
-		fmt.Printf("Received %d blocks for synchronization...\n", len(resp.Blocks))
+		fmt.Printf("Received %d blocks for synchronization from peer...\n", len(resp.Blocks))
 		if len(resp.Blocks) == 0 {
 			return nil, nil
 		}
 
+		// Kiểm tra tính liên tục của chuỗi nhận về
 		for i, block := range resp.Blocks {
 			if i > 0 {
 				prevBlock := resp.Blocks[i-1]
@@ -158,6 +159,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 				}
 			}
 
+			// Verify các transaction bên trong block
 			for _, transaction := range block.Transactions {
 				if transaction.Payload.Type == "System" {
 					continue
@@ -183,15 +185,23 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 					})
 				}
 			}
+		}
+
+		// Sau khi vượt qua mọi bài test, tiến hành Commit state và add từng block vào chuỗi an toàn
+		for _, block := range resp.Blocks {
+			// Kiểm tra xem block đã tồn tại trong chuỗi chưa để tránh trùng lặp
+			if manager.Chain.DB.HasKey([]byte(block.Hash)) {
+				continue
+			}
 
 			err := manager.Commit()
 			if err != nil {
 				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 			}
-
 			manager.Chain.AddBlock(block)
 		}
 
+		fmt.Println("Synchronization completed successfully and chain updated!")
 		return nil, nil
 
 	case MsgGetChain:

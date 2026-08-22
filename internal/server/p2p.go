@@ -110,14 +110,14 @@ func (s *Server) Stop() {
 	s.Peers = make(map[string]*Peer)
 }
 
-func (s *Server) SyncWithPeer(peer *Peer) {
+func (s *Server) SyncWithPeer(peer *Peer) error {
 	if peer == nil {
-		return
+		return fmt.Errorf("not connected to any peers yet")
 	}
 	address := peer.Endpoint
 	fmt.Printf("Sending initial sync request to %s...\n", address)
 	if s.Contracts == nil || s.Contracts.Chain == nil {
-		return
+		return fmt.Errorf("contract not yet initialized")
 	}
 	hashes := s.Contracts.Chain.GetBlockHashes()
 	req := GetBlocksRequest{
@@ -128,13 +128,32 @@ func (s *Server) SyncWithPeer(peer *Peer) {
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		fmt.Printf("Failed to marshal sync request for %s: %v\n", address, err)
-		s.DisconnectToPeer(address) // Clean up the failed connection.
-		return
+		s.DisconnectToPeer(address)
+		return err
 	}
 
 	if err := peer.Send(append(reqBytes, '\n')); err != nil {
 		fmt.Printf("Failed to send sync request to %s: %v\n", address, err)
-		// The peer's ReadLoop will likely handle the disconnection.
+		s.DisconnectToPeer(address)
+		return err
+	}
+	return nil
+}
+
+func (s *Server) SyncWithAllPeers() {
+	peers := s.peerSnapshot()
+	if len(peers) == 0 {
+		fmt.Println("No peers available for synchronization.")
+		return
+	}
+
+	for _, peer := range peers {
+		err := s.SyncWithPeer(peer)
+		if err == nil {
+			fmt.Printf("Successfully initiated sync with peer: %s\n", peer.Endpoint)
+			break
+		}
+		fmt.Printf("Sync failed with peer %s, trying next peer...\n", peer.Endpoint)
 	}
 }
 
@@ -160,7 +179,7 @@ func (s *Server) ConnectAndSync(address string) {
 		return
 	}
 	if peer != nil {
-		s.SyncWithPeer(peer)
+		s.SyncWithAllPeers()
 	}
 }
 
@@ -363,9 +382,7 @@ func (s *Server) connectPersistedPeers() {
 	// Phase 2: Sync with all successfully connected peers
 	if len(connectedPeers) > 0 {
 		fmt.Printf("All %d connection attempts finished. Starting synchronization...\n", len(connectedPeers))
-		for _, peer := range connectedPeers {
-			go s.SyncWithPeer(peer)
-		}
+		s.SyncWithAllPeers()
 	}
 
 	// Phase 3: Send a hardcoded transaction after connecting and starting sync.

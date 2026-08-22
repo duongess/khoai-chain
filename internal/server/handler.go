@@ -10,16 +10,10 @@ import (
 	"time"
 )
 
-// BuildMessageBytes prepares the payload for signing and verification by omitting the signature field.
-func BuildMessageBytes(msg CommandMessage) []byte {
-	temp := msg
+func HandleTransactionByte(transaction core.TxPayload) []byte {
+	temp := transaction
 	temp.Signature = ""
 	data, _ := json.Marshal(temp)
-	return data
-}
-
-func HandleTransactionByte(transaction core.TxPayload) []byte {
-	data, _ := json.Marshal(transaction)
 	return data
 }
 
@@ -33,7 +27,7 @@ func HandleBlocknByte(msg CommandNewBlock) []byte {
 func HandleTransactionSend(transaction *core.Transaction) CommandTransaction {
 	return CommandTransaction{
 		Type:        MsgTransaction,
-		Sender:      string(transaction.Sender),
+		Sender:      transaction.Payload.Sender,
 		Transaction: transaction,
 	}
 }
@@ -92,7 +86,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 	// --- CASE 1: CLIENT SENDS COMMAND (RETURNS ResponseMessage) ---
 	case MsgExecute:
-		var msg CommandMessage
+		var msg CommandExecute
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
 			return json.Marshal(resp)
@@ -117,7 +111,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
 		}
 
-		messageBytes := BuildMessageBytes(msg)
+		messageBytes := HandleTransactionByte(msg.changeToTxPayload())
 
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
@@ -125,12 +119,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		// Call Contract
-		result, tx, errContract, err := manager.Execute(
-			msg.Sender,
-			msg.Contract,
-			msg.Function,
-			msg.Args,
-		)
+		result, tx, errContract, err := manager.Execute(msg.changeToTxPayload())
 
 		var resp ResponseMessage
 		if err != nil {
@@ -139,7 +128,6 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
-			tx.Signature = msg.Signature
 			s.BroadcastNewTransaction(tx)
 		}
 
@@ -233,7 +221,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
 		}
 
-		sigBytes, err := hex.DecodeString(string(msg.Transaction.Signature))
+		sigBytes, err := hex.DecodeString(msg.Transaction.Payload.Signature)
 		if err != nil {
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
 		}
@@ -279,23 +267,19 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		for _, transaction := range msg.Block.Transactions {
-			pubKeyBytes, err := hex.DecodeString(transaction.Sender)
+			pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
 			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 				return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid tx sender public key"})
 			}
 
 			var messageBytes = HandleTransactionByte(transaction.Payload)
-			err = core.VerifySignature(ed25519.PublicKey(transaction.Payload.Sender), messageBytes, []byte(transaction.Signature))
+			sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
+			err = core.VerifySignature(ed25519.PublicKey(transaction.Payload.Sender), messageBytes, sigBytes)
 			if err != nil {
 				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
 			}
 
-			_, _, err = manager.ExecuteOnly(
-				transaction.Sender,
-				transaction.Payload.Contract,
-				transaction.Payload.Function,
-				transaction.Payload.Args,
-			)
+			_, _, err = manager.ExecuteOnly(transaction.Payload)
 			if err != nil {
 				return json.Marshal(ResponseMessage{
 					Status: "Error",

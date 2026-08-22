@@ -62,22 +62,22 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-func (cm *ContractManager) ExecuteOnly(sender, contractName, method string, args []string) ([]byte, error, error) {
+func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) ([]byte, error, error) {
 	cm.stagingState = make(map[string][]byte)
 
-	cm.currentSender = sender
-	cm.permission = core.PublicKeyPeers[string(sender)]
+	cm.currentSender = payload.Sender
+	cm.permission = core.PublicKeyPeers[payload.Sender]
 
 	if cm.permission == "" {
 		return nil, nil, fmt.Errorf("permission does not exist")
 	}
-	app, exists := sdk.GlobalRegistry[string(contractName)]
+	app, exists := sdk.GlobalRegistry[payload.Contract]
 	if !exists {
-		return nil, nil, fmt.Errorf("contract '%s' is not installed", contractName)
+		return nil, nil, fmt.Errorf("contract '%s' is not installed", payload.Contract)
 	}
 	app.SetContext(cm)
 
-	var result, errContract, err = cm.router.CallMethod(app, sender, method, args)
+	var result, errContract, err = cm.router.CallMethod(app, payload.Sender, payload.Function, payload.Args)
 	if err != nil {
 		cm.stagingState = nil
 		return nil, nil, err
@@ -87,13 +87,13 @@ func (cm *ContractManager) ExecuteOnly(sender, contractName, method string, args
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method string, args []string) ([]byte, *core.Transaction, error, error) {
-	result, errContract, err := cm.ExecuteOnly(sender, contractName, method, args)
+func (cm *ContractManager) Execute(payload core.TxPayload) ([]byte, *core.Transaction, error, error) {
+	result, errContract, err := cm.ExecuteOnly(payload)
 	if err != nil {
 		return nil, nil, errContract, err
 	}
 
-	tx := core.NewTransaction(sender, contractName, method, args, time.Now().UnixNano())
+	tx := core.NewTransaction(payload, time.Now().UnixNano())
 	_, err = cm.AddAndCheckMine(tx)
 	if err != nil {
 		return nil, nil, errContract, err

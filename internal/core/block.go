@@ -31,8 +31,17 @@ func NewBlock(txs []*Transaction, prevBlockHash string, height int) *Block {
 
 // NewGenesisBlock creates the first block (Genesis Block)
 func NewGenesisBlock() *Block {
-	// Create a coinbase transaction
-	genesisTx := NewTransaction("System", "KhoaiChain", "Init", []string{"Genesis"}, 0)
+	genesisPayload := TxPayload{
+		Type:     "System",
+		Sender:   "KhoaiChain",
+		Contract: "Init",
+		Function: "Genesis",
+		Args:     []string{"Genesis"},
+		Nonce:    "0",
+	}
+
+	// Gọi hàm tạo transaction với payload mới
+	genesisTx := NewTransaction(genesisPayload, 0)
 	return NewBlock([]*Transaction{genesisTx}, "", 0)
 }
 

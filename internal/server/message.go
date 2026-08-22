@@ -13,14 +13,20 @@ const (
 )
 
 // Request gửi qua TCP
-type CommandMessage struct {
-	Type      string   `json:"type"`
-	Sender    string   `json:"sender"`
-	Contract  string   `json:"contract"`
-	Function  string   `json:"function"`
-	Args      []string `json:"args"`
-	Nonce     string   `json:"nonce"`
-	Signature string   `json:"signature"`
+type CommandExecute struct {
+	core.TxPayload
+}
+
+func (ce CommandExecute) changeToTxPayload() core.TxPayload {
+	return core.TxPayload{
+		Type:      ce.Type,
+		Sender:    ce.Sender,
+		Contract:  ce.Contract,
+		Function:  ce.Function,
+		Args:      ce.Args,
+		Nonce:     ce.Nonce,
+		Signature: ce.Signature,
+	}
 }
 
 type GetBlocksRequest struct {

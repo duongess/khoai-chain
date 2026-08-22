@@ -145,8 +145,8 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
+			s.BroadcastNewTransaction(tx)
 		}
-		s.BroadcastNewTransaction(tx)
 
 		return json.Marshal(resp)
 

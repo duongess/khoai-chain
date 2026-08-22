@@ -38,12 +38,12 @@ func BuildMessageBytes(msg CommandMessage) []byte {
 }
 
 func main() {
-	serverAddress := "0.0.0.0:8083"
+	serverAddress := "0.0.0.0:8080"
 
 	// Nhap truc tiep Hex string cua Private Key va Public Key de test
 	// Vi du: tao cap khoa Ed25519 va dien vao day
-	privKeyHex := "61b688632d012222b44c5844b7b903de64f5b9bc19cdca045de84af93b5c1223ae6e8497c5cfae84beefe759e4f029a6f8f5376aeb7b24fa1ca49c48bb8f487f"
-	pubKeyHex := "ae6e8497c5cfae84beefe759e4f029a6f8f5376aeb7b24fa1ca49c48bb8f487f"
+	privKeyHex := "da0dde201ecbff9a2bf877e3cac55315e0c01ce7a75238aef784f89404158db68413b745fa2a6a0f24b0ebbb24cd6f2102b1ec5e3a7878686d6dda29e902de29"
+	pubKeyHex := "8413b745fa2a6a0f24b0ebbb24cd6f2102b1ec5e3a7878686d6dda29e902de29"
 
 	privBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {
@@ -92,7 +92,7 @@ func main() {
 		Sender:   pubKeyHex,
 		Contract: "examplesgolang",
 		Function: "CreateRawBatch",
-		Args:     []string{"1", "1"},
+		Args:     []string{"10", "1"},
 		Nonce:    receivedNonce,
 	}
 

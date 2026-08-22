@@ -7,20 +7,56 @@ import (
 	"fmt"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core" // Import để dùng struct Block nếu cần
+	"time"
 )
 
-// This function returns ([]byte, error).
-// []byte is the JSON data ALREADY PACKAGED to send back to the other party.
-func HandleMessage(payload []byte, s *Server, manager *contract.ContractManager) ([]byte, error) {
-	return handleMessage(payload, s, manager, nil)
+func HandleTransactionByte(transaction core.TxPayload) []byte {
+	temp := transaction
+	temp.Signature = ""
+	data, _ := json.Marshal(temp)
+	return data
 }
 
-// BuildMessageBytes prepares the payload for signing and verification by omitting the signature field.
-func BuildMessageBytes(msg CommandMessage) []byte {
+func HandleBlocknByte(msg CommandNewBlock) []byte {
 	temp := msg
 	temp.Signature = ""
 	data, _ := json.Marshal(temp)
 	return data
+}
+
+func HandleTransactionSend(transaction *core.Transaction) CommandTransaction {
+	return CommandTransaction{
+		Type:        MsgTransaction,
+		Sender:      transaction.Payload.Sender,
+		Transaction: transaction,
+	}
+}
+
+func errorResponse(msgType string, format string, a ...interface{}) ([]byte, error) {
+	errMsg := fmt.Sprintf("[%s] %s", msgType, fmt.Sprintf(format, a...))
+	return json.Marshal(ResponseMessage{Status: "Error", Error: errMsg})
+}
+
+func HandleBlockSend(newBlock *core.Block) CommandNewBlock {
+
+	var blockMsg = CommandNewBlock{
+		Type:      MsgNewBlock,
+		Sender:    hex.EncodeToString(core.PublicKeyNode),
+		Timestamp: time.Now().UnixNano(),
+		Block:     newBlock,
+	}
+
+	temp := blockMsg
+	temp.Signature = ""
+	data, err := json.Marshal(temp)
+	if err != nil {
+		return CommandNewBlock{}
+	}
+
+	sig := ed25519.Sign(core.PrivateKeyNode, data)
+	blockMsg.Signature = hex.EncodeToString(sig)
+
+	return blockMsg
 }
 
 // genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.
@@ -55,56 +91,49 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 	// --- CASE 1: CLIENT SENDS COMMAND (RETURNS ResponseMessage) ---
 	case MsgExecute:
-		var msg CommandMessage
+		var msg CommandExecute
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
-		}
-
-		var argsBytes [][]byte
-		for _, arg := range msg.Args {
-			argsBytes = append(argsBytes, []byte(arg))
 		}
 
 		err := core.NM.VerifyAndConsume(msg.Sender, msg.Nonce)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		pubKeyBytes, err := hex.DecodeString(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key format"})
+			return errorResponse(baseMsg.Type, "invalid public key format")
 		}
 
 		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
+			return errorResponse(baseMsg.Type, "invalid public key size")
 		}
 
 		sigBytes, err := hex.DecodeString(msg.Signature)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
+			return errorResponse(baseMsg.Type, "invalid signature format")
 		}
 
-		messageBytes := BuildMessageBytes(msg)
+		messageBytes := HandleTransactionByte(msg.changeToTxPayload())
 
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		// Call Contract
-		result, err := manager.Execute(
-			[]byte(msg.Sender),
-			[]byte(msg.Contract),
-			[]byte(msg.Function),
-			argsBytes,
-		)
+		result, tx, errContract, err := manager.Execute(msg.changeToTxPayload())
 
 		var resp ResponseMessage
 		if err != nil {
 			resp = ResponseMessage{Status: "Error", Error: err.Error()}
+		} else if errContract != nil {
+			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
+			s.BroadcastNewTransaction(tx)
 		}
 
 		return json.Marshal(resp)
@@ -112,7 +141,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgSendChain:
 		var resp SendBlocksRequest
 		if err := json.Unmarshal(payload, &resp); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 
@@ -125,7 +154,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgGetChain:
 		var req GetBlocksRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		if peer != nil && !peer.registered && req.Sender != "" && req.Sender != s.Endpoint {
@@ -133,15 +162,15 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			s.registerPeer(peer)
 		}
 
-		var commonHash []byte // Find common point
+		var commonHash string // Find common point
 		for _, hash := range req.Hashes {
-			if manager.Chain.DB.HasKey(hash) {
+			if manager.Chain.DB.HasKey([]byte(hash)) {
 				commonHash = hash
 				break
 			}
 		}
 		var blocksToSend []*core.Block
-		if commonHash == nil {
+		if commonHash == "" {
 
 			// No common point found (Full Sync)
 			fmt.Println("No common point found (Full Sync)")
@@ -160,7 +189,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgIDENTITY:
 		var msg CommandIDENTITY
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 		core.PublicKeyPeers[msg.PublicKey] = msg.Permission
@@ -171,16 +200,101 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgNonce:
 		var msg CommandNonce
 		if err := json.Unmarshal(payload, &msg); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for EXECUTE"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
 			return json.Marshal(resp)
 		}
 
 		var nonce, err = core.NM.GenerateChallenge(msg.Sender)
 		if err != nil {
-			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			return errorResponse(baseMsg.Type, err.Error())
 		}
 
 		return json.Marshal(ResponseMessage{Status: "Success", Result: nonce})
+
+	case MsgTransaction:
+		var msg CommandTransaction
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+		pubKeyBytes, err := hex.DecodeString(msg.Sender)
+		if err != nil {
+			return errorResponse(baseMsg.Type, "invalid public key format")
+		}
+
+		if len(pubKeyBytes) != ed25519.PublicKeySize {
+			return errorResponse(baseMsg.Type, "invalid public key size")
+		}
+
+		sigBytes, err := hex.DecodeString(msg.Transaction.Payload.Signature)
+		if err != nil {
+			return errorResponse(baseMsg.Type, "invalid signature format")
+		}
+
+		messageBytes := HandleTransactionByte(msg.Transaction.Payload)
+
+		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
+		if err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
+
+		_, err = manager.AddAndCheckMine(msg.Transaction)
+		if err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
+
+		return json.Marshal(ResponseMessage{Status: "Success"})
+
+	case MsgNewBlock:
+		var msg CommandNewBlock
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+		pubKeyBytes, err := hex.DecodeString(msg.Sender)
+		if err != nil {
+			return errorResponse(baseMsg.Type, fmt.Sprintf("[%s] invalid public key format: %s", baseMsg.Type, msg.Sender))
+		}
+
+		sigBytes, _ := hex.DecodeString(msg.Signature)
+
+		var messageBytes = HandleBlocknByte(msg)
+		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
+		if err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
+
+		for _, transaction := range msg.Block.Transactions {
+			pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
+			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+				return errorResponse(baseMsg.Type, "invalid tx sender public key")
+			}
+
+			var messageBytes = HandleTransactionByte(transaction.Payload)
+			sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
+			err = core.VerifySignature(ed25519.PublicKey(pubKeyBytes), messageBytes, sigBytes)
+			if err != nil {
+				return errorResponse(baseMsg.Type, err.Error())
+			}
+
+			_, _, err = manager.ExecuteOnly(transaction.Payload)
+			if err != nil {
+				return json.Marshal(ResponseMessage{
+					Status: "Error",
+					Error:  fmt.Sprintf("invalid transaction in block: %s", err.Error()),
+				})
+			}
+		}
+
+		err = manager.Commit()
+
+		if err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
+
+		manager.Chain.AddBlock(msg.Block)
+
+		return json.Marshal(ResponseMessage{Status: "Success"})
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

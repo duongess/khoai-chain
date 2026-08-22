@@ -4,18 +4,20 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/hex"
+	"fmt"
 	"time"
 )
 
 type Block struct {
 	Timestamp     int64
-	PrevBlockHash []byte
-	Hash          []byte
+	PrevBlockHash string
+	Hash          string
 	Transactions  []*Transaction
 	Height        int
 }
 
-func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
+func NewBlock(txs []*Transaction, prevBlockHash string, height int) *Block {
 	block := &Block{
 		Timestamp:     time.Now().Unix(),
 		Transactions:  txs,
@@ -29,24 +31,32 @@ func NewBlock(txs []*Transaction, prevBlockHash []byte, height int) *Block {
 
 // NewGenesisBlock creates the first block (Genesis Block)
 func NewGenesisBlock() *Block {
-	// Create a coinbase transaction
-	genesisTx := NewTransaction([]byte("System"), []byte("KhoaiChain"), []byte("Init"), [][]byte{[]byte("Genesis")}, 0)
-	return NewBlock([]*Transaction{genesisTx}, []byte{}, 0)
-}
-
-func (b *Block) CalculateHash() []byte {
-	// Concatenate all data to be hashed
-	// (Simplified, a Merkle Tree would be used in practice)
-	timestamp := []byte(string(rune(b.Timestamp)))
-	headers := bytes.Join([][]byte{b.PrevBlockHash, timestamp}, []byte{})
-
-	// Add the hash of the transactions
-	for _, tx := range b.Transactions {
-		headers = bytes.Join([][]byte{headers, tx.ID}, []byte{})
+	genesisPayload := TxPayload{
+		Type:     "System",
+		Sender:   "KhoaiChain",
+		Contract: "Init",
+		Function: "Genesis",
+		Args:     []string{"Genesis"},
+		Nonce:    "0",
 	}
 
-	hash := sha256.Sum256(headers)
-	return hash[:]
+	// Gọi hàm tạo transaction với payload mới
+	genesisTx := NewTransaction(genesisPayload, 0)
+	return NewBlock([]*Transaction{genesisTx}, "", 0)
+}
+
+func (b *Block) CalculateHash() string {
+	timestampStr := fmt.Sprintf("%d", b.Timestamp)
+
+	headers := b.PrevBlockHash + timestampStr
+
+	for _, tx := range b.Transactions {
+		headers += tx.ID
+	}
+
+	hashBytes := sha256.Sum256([]byte(headers))
+
+	return hex.EncodeToString(hashBytes[:])
 }
 
 // Serialize: Converts a Block into a byte slice (for DB storage or network transfer)

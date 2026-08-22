@@ -11,20 +11,20 @@ import (
 type Router struct{}
 
 // CallMethod
-func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][]byte) ([]byte, error) {
+func (r *Router) CallMethod(app interface{}, sender, methodName string, args []string) ([]byte, error, error) {
 	// 1. Get information about the App object (Reflection)
 	val := reflect.ValueOf(app)
 
 	// 2. Find function by name
 	// Note: The function must be capitalized (Public) to be found
-	method := val.MethodByName(string(methodName))
+	method := val.MethodByName(methodName)
 	// check sender
 
 	if !method.IsValid() {
 		// Try to find the capitalized function (if the user accidentally sent lowercase)
-		method = val.MethodByName(strings.Title(string(methodName)))
+		method = val.MethodByName(strings.Title(methodName))
 		if !method.IsValid() {
-			return nil, fmt.Errorf("function '%s' does not exist in the contract", methodName)
+			return nil, fmt.Errorf("function '%s' does not exist in the contract", methodName), nil
 		}
 	}
 
@@ -34,13 +34,13 @@ func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][
 	numIn := methodType.NumIn()
 
 	if len(args) != numIn {
-		return nil, fmt.Errorf("expected %d arguments, got %d", numIn, len(args))
+		return nil, fmt.Errorf("expected %d arguments, got %d", numIn, len(args)), nil
 	}
 
 	var inputArgs []reflect.Value
 	for i := 0; i < numIn; i++ {
 		paramType := methodType.In(i)
-		argVal := reflect.ValueOf(string(args[i]))
+		argVal := reflect.ValueOf(args[i])
 
 		// Neu tham so khac kieu string (vi du int), co the xu ly convert o day
 		if argVal.Type() != paramType {
@@ -83,5 +83,5 @@ func (r *Router) CallMethod(app interface{}, sender, methodName []byte, args [][
 		}
 	}
 
-	return resBytes, err
+	return resBytes, err, nil
 }

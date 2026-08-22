@@ -11,7 +11,7 @@ const (
 )
 
 type Blockchain struct {
-	LastHash []byte            // Hash of the latest block (the tip)
+	LastHash string            // Hash of the latest block (the tip)
 	DB       *database.Storage // Connection to the Database
 }
 
@@ -19,7 +19,7 @@ type Blockchain struct {
 // If DB is empty -> Create Genesis.
 // If DB exists -> Load LastHash.
 func InitBlockchain(db *database.Storage) *Blockchain {
-	var lastHash []byte
+	var lastHash string
 
 	// Check if the Blockchain already exists in the DB
 	if !db.HasKey([]byte(lastHashKey)) {
@@ -29,14 +29,14 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 		genesis := NewGenesisBlock()
 
 		// 2. Save Block to DB (Key=Hash, Value=Serialized)
-		err := db.SetData(genesis.Hash, genesis.Serialize())
+		err := db.SetData([]byte(genesis.Hash), genesis.Serialize())
 		if err != nil {
 			fmt.Println("Error saving Genesis block:", err)
 			os.Exit(1)
 		}
 
 		// 3. Save the LastHash pointer
-		err = db.SetData([]byte(lastHashKey), genesis.Hash)
+		err = db.SetData([]byte(lastHashKey), []byte(genesis.Hash))
 		if err != nil {
 			fmt.Println("Error saving LastHash:", err)
 			os.Exit(1)
@@ -46,11 +46,12 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 	} else {
 		// If it exists, get the last hash
 		var err error
-		lastHash, err = db.GetData([]byte(lastHashKey))
+		data, err := db.GetData([]byte(lastHashKey))
 		if err != nil {
 			fmt.Println("Error reading LastHash:", err)
 			os.Exit(1)
 		}
+		lastHash = string(data)
 		fmt.Printf("Blockchain loaded. LastHash: %x\n", lastHash)
 	}
 
@@ -70,14 +71,14 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 	newBlock := NewBlock(txs, bc.LastHash, lastBlock.Height+1)
 
 	// 3. Save the new Block to DB
-	err = bc.DB.SetData(newBlock.Hash, newBlock.Serialize())
+	err = bc.DB.SetData([]byte(newBlock.Hash), newBlock.Serialize())
 	if err != nil {
 		fmt.Println("Error saving new block:", err)
 		return nil
 	}
 
 	// 4. Update LastHash
-	err = bc.DB.SetData([]byte(lastHashKey), newBlock.Hash)
+	err = bc.DB.SetData([]byte(lastHashKey), []byte(newBlock.Hash))
 	if err != nil {
 		fmt.Println("Error updating LastHash:", err)
 		return nil
@@ -95,7 +96,7 @@ func (bc *Blockchain) MineBlock(txs []*Transaction) *Block {
 func (bc *Blockchain) AddBlock(block *Block) {
 	// TODO: Add validation logic here
 
-	err := bc.DB.SetData(block.Hash, block.Serialize())
+	err := bc.DB.SetData([]byte(block.Hash), block.Serialize())
 	if err != nil {
 		fmt.Println("Error saving block from peer:", err)
 		return
@@ -105,15 +106,15 @@ func (bc *Blockchain) AddBlock(block *Block) {
 	// If it's higher, update LastHash (Longest Chain Rule)
 	lastBlock, _ := bc.GetBlock(bc.LastHash)
 	if block.Height > lastBlock.Height {
-		bc.DB.SetData([]byte(lastHashKey), block.Hash)
+		bc.DB.SetData([]byte(lastHashKey), []byte(block.Hash))
 		bc.LastHash = block.Hash
 		fmt.Printf("Synced Block #%d from Peer\n", block.Height)
 	}
 }
 
 // GetBlock: Find a Block by its Hash
-func (bc *Blockchain) GetBlock(hash []byte) (*Block, error) {
-	data, err := bc.DB.GetData(hash)
+func (bc *Blockchain) GetBlock(hash string) (*Block, error) {
+	data, err := bc.DB.GetData([]byte(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +131,8 @@ func (bc *Blockchain) GetBestHeight() int {
 }
 
 // GetBlockHashes: Get all Hashes in the chain (to send to another peer on request)
-func (bc *Blockchain) GetBlockHashes() [][]byte {
-	var hashes [][]byte
+func (bc *Blockchain) GetBlockHashes() []string {
+	var hashes []string
 	currentHash := bc.LastHash
 
 	for {
@@ -175,12 +176,12 @@ func (bc *Blockchain) GetAllBlock() []*Block {
 	return blocks
 }
 
-func (bc *Blockchain) GetBlockAfter(startHash []byte) []*Block {
+func (bc *Blockchain) GetBlockAfter(startHash string) []*Block {
 	var blocks []*Block
 	currentHash := bc.LastHash
 
 	for {
-		if string(currentHash) == string(startHash) {
+		if currentHash == startHash {
 			break
 		}
 		block, err := bc.GetBlock(currentHash)

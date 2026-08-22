@@ -47,7 +47,8 @@ func (b *BaseContract) Save(key []byte, data interface{}) error {
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
 	// 3. Save to DB
-	return b.Ctx.PutState([]byte(realKey), bytesData)
+	b.Ctx.PutState(realKey, bytesData)
+	return nil
 }
 
 // Get: Reads from DB and populates a struct (target must be a pointer)
@@ -60,7 +61,7 @@ func (b *BaseContract) Get(key []byte, target interface{}) error {
 	realKey := fmt.Sprintf("%s_%s", b.Name, key)
 
 	// 2. Get raw data from DB
-	bytesData, err := b.Ctx.GetState([]byte(realKey))
+	bytesData, err := b.Ctx.GetState(realKey)
 	if err != nil {
 		return err // Not found or DB error
 	}

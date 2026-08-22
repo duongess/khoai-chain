@@ -12,8 +12,11 @@ type ContractManager struct {
 	router        *Router // Add router
 	Chain         *core.Blockchain
 	Mempool       *core.Mempool
-	currentSender []byte
+	currentSender string
 	permission    string
+
+	OnBlockMined func(block *core.Block)
+	stagingState map[string][]byte
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -24,16 +27,28 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 	}
 }
 
-func (cm *ContractManager) PutState(key []byte, value []byte) error {
-	return cm.Chain.DB.SetData(key, value)
+func (cm *ContractManager) PutState(key string, value []byte) {
+	cm.stagingState[key] = value
 }
 
-func (cm *ContractManager) GetState(key []byte) ([]byte, error) {
-	return cm.Chain.DB.GetData(key)
+func (cm *ContractManager) GetState(key string) ([]byte, error) {
+	if val, ok := cm.stagingState[key]; ok {
+		return val, nil
+	}
+	return cm.Chain.DB.GetData([]byte(key))
 }
 
-func (cm *ContractManager) GetSender() []byte {
+func (cm *ContractManager) GetSender() string {
 	return cm.currentSender
+}
+
+func (cm *ContractManager) Commit() error {
+	for k, v := range cm.stagingState {
+		var err = cm.Chain.DB.SetData([]byte(k), v)
+		return err
+	}
+
+	return nil
 }
 
 func (cm *ContractManager) GetPermission() string {
@@ -47,40 +62,47 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-// Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][]byte) ([]byte, error) {
-	// 1. Find App
-	cm.currentSender = sender
-	cm.permission = core.PublicKeyPeers[string(sender)]
+func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) ([]byte, error, error) {
+	cm.stagingState = make(map[string][]byte)
+
+	cm.currentSender = payload.Sender
+	cm.permission = core.PublicKeyPeers[payload.Sender]
 
 	if cm.permission == "" {
-		return nil, fmt.Errorf("permission does not exist")
+		return nil, nil, fmt.Errorf("permission does not exist")
 	}
-	app, exists := sdk.GlobalRegistry[string(contractName)]
+	app, exists := sdk.GlobalRegistry[payload.Contract]
 	if !exists {
-		return nil, fmt.Errorf("contract '%s' is not installed", contractName)
+		return nil, nil, fmt.Errorf("contract '%s' is not installed", payload.Contract)
 	}
 	app.SetContext(cm)
 
-	// 2. RUN LOGIC (Simulation)
-	result, err := cm.router.CallMethod(app, sender, method, args)
+	var result, errContract, err = cm.router.CallMethod(app, payload.Sender, payload.Function, payload.Args)
 	if err != nil {
-		fmt.Println("Contract Error (Reverted):", err)
-		return nil, err // If there's an error, return immediately, don't save the transaction
+		cm.stagingState = nil
+		return nil, nil, err
 	}
 
-	// 3. IF SUCCESSFUL -> CREATE TRANSACTION (Package)
-	// (Assuming sender is AdminLocal - later get from Auth API)
-	tx := core.NewTransaction(
-		sender,
-		contractName,
-		method,
-		args,
-		time.Now().UnixNano(),
-	)
+	return result, errContract, err
+}
 
-	// 4. MINE BLOCK (Instant Mining)
-	fmt.Println("Packaging transaction...")
+// Execute: Run logic -> Create Tx -> Mine Block
+func (cm *ContractManager) Execute(payload core.TxPayload) ([]byte, *core.Transaction, error, error) {
+	result, errContract, err := cm.ExecuteOnly(payload)
+	if err != nil {
+		return nil, nil, errContract, err
+	}
+
+	tx := core.NewTransaction(payload, time.Now().UnixNano())
+	_, err = cm.AddAndCheckMine(tx)
+	if err != nil {
+		return nil, nil, errContract, err
+	}
+
+	return result, tx, errContract, nil
+}
+
+func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, error) {
 	txsToMine, ready := cm.Mempool.Add(tx)
 	if ready {
 		fmt.Printf("10 transactions reached -> Activating BLOCK MINING!\n")
@@ -88,8 +110,11 @@ func (cm *ContractManager) Execute(sender, contractName, method []byte, args [][
 		if newBlock == nil {
 			return nil, fmt.Errorf("error mining block")
 		}
-	}
 
-	// Return the execution result of the Smart Contract
-	return result, nil
+		if cm.OnBlockMined != nil {
+			cm.OnBlockMined(newBlock)
+		}
+		return newBlock, nil
+	}
+	return nil, nil
 }

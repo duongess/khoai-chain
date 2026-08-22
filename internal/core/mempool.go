@@ -23,7 +23,7 @@ func (mp *Mempool) Add(tx *Transaction) ([]*Transaction, bool) {
 	mp.mutex.Lock()
 	defer mp.mutex.Unlock()
 
-	sender := string(tx.Sender)
+	sender := tx.Payload.Sender
 	mp.PendingTxs[sender] = append(mp.PendingTxs[sender], tx)
 
 	count := len(mp.PendingTxs[sender])

@@ -22,7 +22,8 @@ type IdentityMessage struct {
 	Permission string `json:"permission"`
 }
 
-var PublicKeyNode []byte
+var PrivateKeyNode ed25519.PrivateKey
+var PublicKeyNode ed25519.PublicKey
 var PermissionNode string
 var PublicKeyPeers = make(map[string]string)
 
@@ -51,6 +52,13 @@ func LoadIdentity(keyDir string, permissionConf string) error {
 		return fmt.Errorf("error decoding public key: %w", err)
 	}
 
+	privPath := filepath.Join(keyDir, "private.key")
+	privHex, err := os.ReadFile(privPath)
+	if err != nil {
+		return fmt.Errorf("error decoding private key: %w", err)
+	}
+
+	PrivateKeyNode = privHex
 	PublicKeyNode = pubBytes
 	PermissionNode = permissionConf
 	PublicKeyPeers[hex.EncodeToString(PublicKeyNode)] = PermissionNode

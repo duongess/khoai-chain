@@ -256,15 +256,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return errorResponse(baseMsg.Type, fmt.Sprintf("[%s] invalid public key format: %s", baseMsg.Type, msg.Sender))
 		}
 
-		if len(pubKeyBytes) != ed25519.PublicKeySize {
-			errMsg := fmt.Sprintf("[%s] invalid public key size: got %d bytes (sender: %s)", baseMsg.Type, len(pubKeyBytes), msg.Sender)
-			return json.Marshal(ResponseMessage{Status: "Error", Error: errMsg})
-		}
-
-		sigBytes, err := hex.DecodeString(msg.Signature)
-		if err != nil {
-			return errorResponse(baseMsg.Type, "invalid signature format")
-		}
+		sigBytes, _ := hex.DecodeString(msg.Signature)
 
 		var messageBytes = HandleBlocknByte(msg)
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
@@ -280,7 +272,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 
 			var messageBytes = HandleTransactionByte(transaction.Payload)
 			sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
-			err = core.VerifySignature(ed25519.PublicKey(transaction.Payload.Sender), messageBytes, sigBytes)
+			err = core.VerifySignature(ed25519.PublicKey(pubKeyBytes), messageBytes, sigBytes)
 			if err != nil {
 				return errorResponse(baseMsg.Type, err.Error())
 			}

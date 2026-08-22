@@ -18,9 +18,8 @@ func BuildMessageBytes(msg CommandMessage) []byte {
 	return data
 }
 
-func HandleTransactionByte(msg CommandTransaction) []byte {
-	temp := msg.Transaction.Payload
-	data, _ := json.Marshal(temp)
+func HandleTransactionByte(transaction core.TxPayload) []byte {
+	data, _ := json.Marshal(transaction)
 	return data
 }
 
@@ -239,7 +238,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
 		}
 
-		messageBytes := HandleTransactionByte(msg)
+		messageBytes := HandleTransactionByte(msg.Transaction.Payload)
 
 		err = core.VerifySignature(pubKeyBytes, messageBytes, sigBytes)
 		if err != nil {
@@ -268,7 +267,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid public key size"})
 		}
 
-		sigBytes, err := hex.DecodeString(string(msg.Signature))
+		sigBytes, err := hex.DecodeString(msg.Signature)
 		if err != nil {
 			return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid signature format"})
 		}
@@ -280,18 +279,28 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		for _, transaction := range msg.Block.Transactions {
-			_, _, err := manager.ExecuteOnly(
+			pubKeyBytes, err := hex.DecodeString(transaction.Sender)
+			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+				return json.Marshal(ResponseMessage{Status: "Error", Error: "invalid tx sender public key"})
+			}
+
+			var messageBytes = HandleTransactionByte(transaction.Payload)
+			err = core.VerifySignature(ed25519.PublicKey(transaction.Payload.Sender), messageBytes, []byte(transaction.Signature))
+			if err != nil {
+				return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+			}
+
+			_, _, err = manager.ExecuteOnly(
 				transaction.Sender,
 				transaction.Payload.Contract,
 				transaction.Payload.Function,
 				transaction.Payload.Args,
 			)
 			if err != nil {
-				errResp := ResponseMessage{
+				return json.Marshal(ResponseMessage{
 					Status: "Error",
-					Error:  fmt.Sprintf("error transaction '%x': %s", transaction.ID, err),
-				}
-				return json.Marshal(errResp)
+					Error:  fmt.Sprintf("invalid transaction in block: %s", err.Error()),
+				})
 			}
 		}
 

@@ -39,3 +39,38 @@ func (mp *Mempool) Add(tx *Transaction) ([]*Transaction, bool) {
 	}
 	return nil, false
 }
+
+func (mp *Mempool) RemoveIncluded(minedTxs []*Transaction) {
+	mp.mutex.Lock()
+	defer mp.mutex.Unlock()
+
+	// Group signatures-to-remove by sender for O(1) lookups per pending list.
+	toRemove := make(map[string]map[string]bool)
+	for _, tx := range minedTxs {
+		sender := tx.Payload.Sender
+		if toRemove[sender] == nil {
+			toRemove[sender] = make(map[string]bool)
+		}
+		toRemove[sender][tx.Payload.Signature] = true
+	}
+
+	for sender, sigs := range toRemove {
+		pending, ok := mp.PendingTxs[sender]
+		if !ok {
+			continue
+		}
+
+		filtered := pending[:0]
+		for _, tx := range pending {
+			if !sigs[tx.Payload.Signature] {
+				filtered = append(filtered, tx)
+			}
+		}
+
+		if len(filtered) == 0 {
+			delete(mp.PendingTxs, sender)
+		} else {
+			mp.PendingTxs[sender] = filtered
+		}
+	}
+}

@@ -44,10 +44,10 @@ func (cm *ContractManager) GetSender() string {
 
 func (cm *ContractManager) Commit() error {
 	for k, v := range cm.stagingState {
-		var err = cm.Chain.DB.SetData([]byte(k), v)
-		return err
+		if err := cm.Chain.DB.SetData([]byte(k), v); err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
@@ -87,19 +87,19 @@ func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) ([]byte, error, e
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(payload core.TxPayload) ([]byte, *core.Transaction, error, error) {
+func (cm *ContractManager) Execute(payload core.TxPayload) ([]byte, *core.Transaction, *core.Block, error, error) {
 	result, errContract, err := cm.ExecuteOnly(payload)
 	if err != nil {
-		return nil, nil, errContract, err
+		return nil, nil, nil, errContract, err
 	}
 
 	tx := core.NewTransaction(payload, time.Now().UnixNano())
-	_, err = cm.AddAndCheckMine(tx)
+	minedBlock, err := cm.AddAndCheckMine(tx)
 	if err != nil {
-		return nil, nil, errContract, err
+		return nil, nil, nil, errContract, err
 	}
 
-	return result, tx, errContract, nil
+	return result, tx, minedBlock, errContract, nil
 }
 
 func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, error) {

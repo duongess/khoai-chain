@@ -124,7 +124,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		}
 
 		// Call Contract
-		result, tx, errContract, err := manager.Execute(msg.changeToTxPayload())
+		result, tx, minedBlock, errContract, err := manager.Execute(msg.changeToTxPayload())
 
 		var resp ResponseMessage
 		if err != nil {
@@ -133,7 +133,10 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
 			resp = ResponseMessage{Status: "Success", Result: string(result)}
-			s.BroadcastNewTransaction(tx)
+			if minedBlock == nil {
+				// tx is still pending — gossip it so peers' mempools stay in sync
+				s.BroadcastNewTransaction(tx)
+			}
 		}
 
 		return json.Marshal(resp)
@@ -141,14 +144,65 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 	case MsgSendChain:
 		var resp SendBlocksRequest
 		if err := json.Unmarshal(payload, &resp); err != nil {
-			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON for SEND_CHAIN"}
 			return json.Marshal(resp)
 		}
 
-		fmt.Printf("Received %d blocks for synchronization...\n", len(resp.Blocks))
-		for _, block := range resp.Blocks {
-			manager.Chain.AddBlock(block)
+		fmt.Printf("Received %d blocks for synchronization from peer...\n", len(resp.Blocks))
+		if len(resp.Blocks) == 0 {
+			return nil, nil
 		}
+
+		// Kiểm tra tính liên tục của chuỗi nhận về
+		for i, block := range resp.Blocks {
+			if i > 0 {
+				prevBlock := resp.Blocks[i-1]
+				if block.PrevBlockHash != prevBlock.Hash {
+					return json.Marshal(ResponseMessage{Status: "Error", Error: "broken chain link during sync"})
+				}
+			}
+
+			// Verify các transaction bên trong block
+			for _, transaction := range block.Transactions {
+				if transaction.Payload.Type == "System" {
+					continue
+				}
+
+				pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
+				if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+					return errorResponse(baseMsg.Type, "invalid tx sender public key")
+				}
+
+				var messageBytes = HandleTransactionByte(transaction.Payload)
+				sigBytes, _ := hex.DecodeString(transaction.Payload.Signature)
+				err = core.VerifySignature(ed25519.PublicKey(pubKeyBytes), messageBytes, sigBytes)
+				if err != nil {
+					return errorResponse(baseMsg.Type, err.Error())
+				}
+
+				_, _, err = manager.ExecuteOnly(transaction.Payload)
+				if err != nil {
+					return json.Marshal(ResponseMessage{
+						Status: "Error",
+						Error:  fmt.Sprintf("invalid transaction in block: %s", err.Error()),
+					})
+				}
+			}
+		}
+
+		if err := manager.Chain.AddBlocks(resp.Blocks); err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: err.Error()})
+		}
+
+		if err := manager.Commit(); err != nil {
+			return json.Marshal(ResponseMessage{Status: "Error", Error: "failed to commit contract states: " + err.Error()})
+		}
+
+		for _, block := range resp.Blocks {
+			manager.Mempool.RemoveIncluded(block.Transactions)
+		}
+
+		fmt.Println("Synchronization completed successfully and chain updated!")
 		return nil, nil
 
 	case MsgGetChain:
@@ -292,7 +346,10 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 			return errorResponse(baseMsg.Type, err.Error())
 		}
 
-		manager.Chain.AddBlock(msg.Block)
+		if err := manager.Chain.AddBlock(msg.Block); err != nil {
+			return errorResponse(baseMsg.Type, err.Error())
+		}
+		manager.Mempool.RemoveIncluded(msg.Block.Transactions)
 
 		return json.Marshal(ResponseMessage{Status: "Success"})
 	}

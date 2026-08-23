@@ -830,7 +830,7 @@ func GenContract(cfg *BuilderConfig, abiDir string) error {
 				}
 
 				fnName := fn.Name.Name
-				if fnName[0] < 'A' || fnName[0] > 'Z' {
+				if fnName[0] < 'A' || fnName[0] > 'Z' || fnName == "Init" {
 					continue
 				}
 

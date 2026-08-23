@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -12,8 +13,9 @@ type BaseContract struct {
 	Ctx  StateContext
 }
 
-func RegisterContract(name string, c SmartContract) {
-	GlobalRegistry[name] = c
+func RegisterContract(c SmartContract) {
+	contractName := reflect.TypeOf(c).Elem().Name()
+	GlobalRegistry[contractName] = c
 }
 
 // SetName: Sets the contract name

@@ -1,37 +1,52 @@
-interface EXECUTE {
-    Type: string;
-    Sender: string;
-    Contract: string;
-    Function: string;
-    Args: string[];
-    Nonce: string;
+export interface EXECUTE {
+    type: string;
+    sender: string;
+    contract: string;
+    function: string;
+    args: string[];
+    nonce: string;
+    signature: string;
 }
 
-interface PEER {
+export interface PEER {
     Type: string;
     Address: string;
     PublicKey: string;
 }
 
-export async function sendP2p(data: EXECUTE | PEER): Promise<any> {
+export async function sendP2p(payload: EXECUTE | PEER): Promise<any> {
+    console.log(payload);
     try {
-        const response = await fetch('/api/config', {
+        const response = await fetch('/api/p2p/message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            throw new Error(`Error P2P: ${response.statusText} (Mã: ${response.status})`);
+            throw new Error(`Error P2P: ${response.statusText} (Code: ${response.status})`);
         }
 
-        const result = await response.json();
-        return result;
+        const data = await response.json();
+        
+        if (data.status !== "success") {
+            throw new Error(data.error || "HTTP Bridge error");
+        }
+
+        // Them trim() de loai bo ky tu \n thua tu server Go
+        const p2pResult = JSON.parse(data.result.trim());
+        
+        if (p2pResult.status === "Error") {
+            throw new Error(`[Node Error]: ${p2pResult.error}`);
+        }
+
+        return p2pResult;
+
     } catch (err: any) {
-        console.error("Không thể gửi thông điệp P2P tới Node:", err);
+        console.error("Unable to send P2P message:", err.message || err);
         throw err;
     }
 }

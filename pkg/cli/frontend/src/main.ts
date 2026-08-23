@@ -1,0 +1,120 @@
+/**
+ * Main Application Entry Point
+ * Initializes all sub-modules and exposes global handlers.
+ */
+import { CONFIG } from './config.ts';
+import { logConsole, clearTerminalLogs } from './utils/logger.ts';
+import { initTheme, toggleTheme } from './modules/theme.ts';
+import { 
+  initAuth, 
+  openAuthModal, 
+  closeAuthModal, 
+  saveAuthModal, 
+  logoutAuth, 
+  generateDemoKeypair 
+} from './modules/auth.ts';
+import { 
+  updatePeersDropdown, 
+  executeGetPeers, 
+  executeAddPeer, 
+  executeRemovePeer 
+} from './modules/peers.ts';
+import { 
+  initContractDropdowns, 
+  handleContractChange, 
+  handleFunctionChange, 
+  executeSignAndSendContract 
+} from './modules/contracts.ts';
+
+// UI Helpers
+export function toggleOpblock(id: string): void {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('is-open');
+}
+
+export function toggleTryOut(id: string): void {
+  const el = document.getElementById(`try-${id}`);
+  if (el) el.classList.toggle('active');
+}
+
+export function clearResponses(id: string): void {
+  const el = document.getElementById(`responses-${id}`);
+  if (el) el.style.display = 'none';
+}
+
+export function filterTag(tag: 'all' | 'peers' | 'contracts'): void {
+  const secPeers = document.getElementById('section-peers');
+  const secContracts = document.getElementById('section-contracts');
+  const tabAll = document.getElementById('tab-all');
+  const tabPeers = document.getElementById('tab-peers');
+  const tabContracts = document.getElementById('tab-contracts');
+
+  if (tabAll) tabAll.classList.remove('active');
+  if (tabPeers) tabPeers.classList.remove('active');
+  if (tabContracts) tabContracts.classList.remove('active');
+
+  if (tag === 'all') {
+    if (secPeers) secPeers.style.display = 'block';
+    if (secContracts) secContracts.style.display = 'block';
+    if (tabAll) tabAll.classList.add('active');
+  } else if (tag === 'peers') {
+    if (secPeers) secPeers.style.display = 'block';
+    if (secContracts) secContracts.style.display = 'none';
+    if (tabPeers) tabPeers.classList.add('active');
+  } else if (tag === 'contracts') {
+    if (secPeers) secPeers.style.display = 'none';
+    if (secContracts) secContracts.style.display = 'block';
+    if (tabContracts) tabContracts.classList.add('active');
+  }
+}
+
+// Attach functions to global window for inline HTML onclick/onchange handlers
+declare global {
+  interface Window {
+    toggleTheme: typeof toggleTheme;
+    openAuthModal: typeof openAuthModal;
+    closeAuthModal: typeof closeAuthModal;
+    saveAuthModal: typeof saveAuthModal;
+    logoutAuth: typeof logoutAuth;
+    generateDemoKeypair: typeof generateDemoKeypair;
+    toggleOpblock: typeof toggleOpblock;
+    toggleTryOut: typeof toggleTryOut;
+    clearResponses: typeof clearResponses;
+    filterTag: typeof filterTag;
+    executeGetPeers: typeof executeGetPeers;
+    executeAddPeer: typeof executeAddPeer;
+    executeRemovePeer: typeof executeRemovePeer;
+    handleContractChange: typeof handleContractChange;
+    handleFunctionChange: typeof handleFunctionChange;
+    executeSignAndSendContract: typeof executeSignAndSendContract;
+    clearTerminalLogs: typeof clearTerminalLogs;
+  }
+}
+
+window.toggleTheme = toggleTheme;
+window.openAuthModal = openAuthModal;
+window.closeAuthModal = closeAuthModal;
+window.saveAuthModal = saveAuthModal;
+window.logoutAuth = logoutAuth;
+window.generateDemoKeypair = generateDemoKeypair;
+window.toggleOpblock = toggleOpblock;
+window.toggleTryOut = toggleTryOut;
+window.clearResponses = clearResponses;
+window.filterTag = filterTag;
+window.executeGetPeers = executeGetPeers;
+window.executeAddPeer = executeAddPeer;
+window.executeRemovePeer = executeRemovePeer;
+window.handleContractChange = handleContractChange;
+window.handleFunctionChange = handleFunctionChange;
+window.executeSignAndSendContract = executeSignAndSendContract;
+window.clearTerminalLogs = clearTerminalLogs;
+
+// Bootstrap Application on DOM Ready
+window.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initAuth();
+  initContractDropdowns();
+  updatePeersDropdown();
+
+  logConsole('info', `FastAPI Swagger UI initialized. Target node: ${CONFIG.TARGET_NODE}`);
+});

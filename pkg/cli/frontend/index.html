@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI - Node Commander & Contract API</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Open+Sans:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Modular Stylesheet -->
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+
+  <!-- ==========================================================================
+       FASTAPI TOP NAVIGATION BAR
+       ========================================================================== -->
+  <header class="topbar">
+    <div class="topbar-wrapper">
+      <a href="#" class="topbar-logo" onclick="event.preventDefault()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" fill="#009688"/>
+          <path d="M12 4L6 14H11L10 20L18 10H13L14 4H12Z" fill="white"/>
+        </svg>
+        <span>FastAPI</span>
+        <span class="topbar-logo-badge">Node Commander</span>
+      </a>
+
+      <div class="topbar-actions">
+        <button class="theme-toggle-btn" onclick="toggleTheme()">
+          <span id="theme-icon">🌓</span>
+          <span id="theme-text">Dark Mode</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       FASTAPI SWAGGER UI MAIN CONTAINER
+       ========================================================================== -->
+  <div class="swagger-ui">
+    
+    <!-- Info Section -->
+    <div class="info-section">
+      <div class="info-header">
+        <h1 class="info-title">Node Commander API</h1>
+        <span class="info-version">0.1.0</span>
+        <span class="info-oas">OAS 3.1.0</span>
+      </div>
+      <p class="info-description">
+        Developer-focused FastAPI documentation interface for Node Peer Management and ABI-driven Smart Contract interactions secured with <strong>Ed25519 Cryptographic Signatures</strong>.
+      </p>
+    </div>
+
+    <!-- Server & Authorize Bar -->
+    <div class="server-and-auth-bar">
+      <div class="server-selector-group">
+        <span class="server-label">Servers</span>
+        <span class="server-badge" id="target-node-display">{{.TargetNode}} - Target Node API</span>
+      </div>
+
+      <div>
+        <button id="auth-btn" class="btn-authorize" onclick="openAuthModal()">
+          <span id="auth-lock-icon">🔒</span>
+          <span id="auth-btn-text">Authorize</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tag Filter Tabs (Peers / Contracts) -->
+    <div class="tag-tabs">
+      <button class="tag-tab-btn active" id="tab-all" onclick="filterTag('all')">
+        All Endpoints
+      </button>
+      <button class="tag-tab-btn" id="tab-peers" onclick="filterTag('peers')">
+        peers <span class="tag-badge-count" id="peers-count-tag">3</span>
+      </button>
+      <button class="tag-tab-btn" id="tab-contracts" onclick="filterTag('contracts')">
+        contracts <span class="tag-badge-count">1</span>
+      </button>
+    </div>
+
+    <!-- ==========================================================================
+         TAG SECTION: PEERS
+         ========================================================================== -->
+    <div class="opblock-tag-section" id="section-peers">
+      <div class="opblock-tag-header">
+        <div class="opblock-tag-title">
+          <span>peers</span>
+        </div>
+        <div class="opblock-tag-desc">Node mesh discovery, peer connection, and multiaddr routing</div>
+      </div>
+
+      <!-- ENDPOINT 1: GET /peers -->
+      <div class="opblock get is-open" id="opblock-get-peers">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-get-peers')">
+          <span class="opblock-summary-method">GET</span>
+          <span class="opblock-summary-path">/peers</span>
+          <span class="opblock-summary-description">Get list of connected network peers</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+
+        <div class="opblock-body">
+          <div class="opblock-section-header">
+            <span class="opblock-title">Parameters</span>
+            <button class="btn-try-out active" id="try-get-peers" onclick="toggleTryOut('get-peers')">Try it out</button>
+          </div>
+
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+            No query parameters required. Returns current active peer routing table.
+          </div>
+
+          <div class="execute-wrapper">
+            <button class="btn-execute" onclick="executeGetPeers()">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('get-peers')">Clear</button>
+          </div>
+
+          <!-- Responses -->
+          <div class="responses-wrapper" id="responses-get-peers">
+            <div class="response-block">
+              <div class="response-label">Responses</div>
+              <table class="parameters-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Code</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="status-code-badge status-200" id="status-get-peers">200</span></td>
+                    <td>
+                      <div class="response-label" style="margin-top: 4px;">Curl</div>
+                      <div class="code-box" id="curl-get-peers">curl -X 'GET' '{{.TargetNode}}/peers' -H 'accept: application/json'</div>
+                      
+                      <div class="response-label" style="margin-top: 10px;">Request URL</div>
+                      <div class="code-box" id="url-get-peers">{{.TargetNode}}/peers</div>
+
+                      <div class="response-label" style="margin-top: 10px;">Response body</div>
+                      <div class="code-box" id="body-get-peers">[
+  {
+    "peer_id": "12D3KooWStZ1k4P8ZJ9mY...",
+    "multiaddr": "/ip4/198.51.100.24/tcp/9000/p2p/12D3KooWStZ1...",
+    "latency_ms": 18,
+    "status": "connected",
+    "tag": "validator-frankfurt"
+  },
+  {
+    "peer_id": "12D3KooWNx9Bv3T4qL2eR...",
+    "multiaddr": "/ip4/203.0.113.88/tcp/9000/p2p/12D3KooWNx9B...",
+    "latency_ms": 32,
+    "status": "connected",
+    "tag": "sentry-singapore"
+  }
+]</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ENDPOINT 2: POST /add-peer -->
+      <div class="opblock post" id="opblock-post-add-peer">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-post-add-peer')">
+          <span class="opblock-summary-method">POST</span>
+          <span class="opblock-summary-path">/add-peer</span>
+          <span class="opblock-summary-description">Dial and connect a new network peer</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+
+        <div class="opblock-body">
+          <div class="opblock-section-header">
+            <span class="opblock-title">Parameters & Request Body</span>
+            <button class="btn-try-out active" id="try-add-peer" onclick="toggleTryOut('add-peer')">Try it out</button>
+          </div>
+
+          <table class="parameters-table">
+            <thead>
+              <tr>
+                <th style="width: 200px;">Parameter</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-add-peer-address" class="form-control mono" value="/ip4/192.0.2.146/tcp/9000/p2p/12D3KooWTestPeerId" placeholder="/ip4/x.x.x.x/tcp/9000/p2p/..." />
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="param-name">pubkey</div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-add-peer-pubkey" class="form-control mono" placeholder="0x9a8f... (Optional Ed25519 identity key)" />
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="param-name">tag</div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-add-peer-tag" class="form-control" value="bootnode-us-east" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executeAddPeer()">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('add-peer')">Clear</button>
+          </div>
+
+          <!-- Responses -->
+          <div class="responses-wrapper" id="responses-add-peer" style="display: none;">
+            <div class="response-block">
+              <div class="response-label">Responses</div>
+              <table class="parameters-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Code</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="status-code-badge status-200" id="status-add-peer">200</span></td>
+                    <td>
+                      <div class="response-label">Curl</div>
+                      <div class="code-box" id="curl-add-peer"></div>
+                      
+                      <div class="response-label" style="margin-top: 10px;">Response body</div>
+                      <div class="code-box" id="body-add-peer"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ENDPOINT 3: POST /remove-peer -->
+      <div class="opblock post" id="opblock-post-remove-peer">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-post-remove-peer')">
+          <span class="opblock-summary-method">POST</span>
+          <span class="opblock-summary-path">/remove-peer</span>
+          <span class="opblock-summary-description">Disconnect and prune peer from routing table</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+
+        <div class="opblock-body">
+          <div class="opblock-section-header">
+            <span class="opblock-title">Parameters & Request Body</span>
+            <button class="btn-try-out active" id="try-remove-peer" onclick="toggleTryOut('remove-peer')">Try it out</button>
+          </div>
+
+          <table class="parameters-table">
+            <thead>
+              <tr>
+                <th style="width: 200px;">Parameter</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">peer_id <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <select id="input-remove-peer-id" class="form-control mono">
+                    <!-- Populated dynamically -->
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="param-name">reason</div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-remove-reason" class="form-control" value="Manual administrator prune" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executeRemovePeer()">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('remove-peer')">Clear</button>
+          </div>
+
+          <!-- Responses -->
+          <div class="responses-wrapper" id="responses-remove-peer" style="display: none;">
+            <div class="response-block">
+              <div class="response-label">Responses</div>
+              <table class="parameters-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Code</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="status-code-badge status-200" id="status-remove-peer">200</span></td>
+                    <td>
+                      <div class="response-label">Response body</div>
+                      <div class="code-box" id="body-remove-peer"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==========================================================================
+         TAG SECTION: CONTRACTS
+         ========================================================================== -->
+    <div class="opblock-tag-section" id="section-contracts">
+      <div class="opblock-tag-header">
+        <div class="opblock-tag-title">
+          <span>contracts</span>
+        </div>
+        <div class="opblock-tag-desc">Smart contract execution, ABI dynamic forms, and Ed25519 transaction signing</div>
+      </div>
+
+      <!-- ENDPOINT: POST /contract/call -->
+      <div class="opblock post is-open" id="opblock-post-contract-call">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-post-contract-call')">
+          <span class="opblock-summary-method">POST</span>
+          <span class="opblock-summary-path">/contract/call</span>
+          <span class="opblock-summary-description">Sign with Ed25519 and dispatch smart contract invocation</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+
+        <div class="opblock-body">
+          <div class="opblock-section-header">
+            <span class="opblock-title">ABI Contract Selector & Dynamic Schema</span>
+            <button class="btn-try-out active" id="try-contract-call" onclick="toggleTryOut('contract-call')">Try it out</button>
+          </div>
+
+          <!-- Contract & Function Pickers -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+              <label style="font-weight: 700; font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">TARGET CONTRACT</label>
+              <select id="contract-select" class="form-control mono" onchange="handleContractChange()">
+                <!-- Populated dynamically from ABIs -->
+              </select>
+            </div>
+            <div>
+              <label style="font-weight: 700; font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">FUNCTION METHOD</label>
+              <select id="function-select" class="form-control mono" onchange="handleFunctionChange()">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic ABI Inputs Table -->
+          <table class="parameters-table">
+            <thead>
+              <tr>
+                <th style="width: 220px;">ABI Parameter</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody id="dynamic-contract-params-body">
+              <!-- Dynamically generated rows based on selected ABI function -->
+            </tbody>
+          </table>
+
+          <!-- Gas & Nonce -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+              <label style="font-size: 12px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">gas_limit (integer)</label>
+              <input type="number" id="input-gas-limit" class="form-control mono" value="250000" />
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">nonce (integer)</label>
+              <input type="number" id="input-nonce" class="form-control mono" value="42" />
+            </div>
+          </div>
+
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executeSignAndSendContract()">
+              ✍️ Sign & Send (POST {{.TargetNode}}/contract/call)
+            </button>
+            <button class="btn-clear" onclick="clearResponses('contract-call')">Clear</button>
+          </div>
+
+          <!-- Responses -->
+          <div class="responses-wrapper" id="responses-contract-call" style="display: none;">
+            <div class="response-block">
+              <div class="response-label">Responses</div>
+              <table class="parameters-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Code</th>
+                    <th>Execution Result & TxReceipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="status-code-badge status-200" id="status-contract-call">200</span></td>
+                    <td>
+                      <div class="response-label">Request Payload (Ed25519 Signed)</div>
+                      <div class="code-box" id="payload-contract-call"></div>
+
+                      <div class="response-label" style="margin-top: 10px;">Curl Equivalent</div>
+                      <div class="code-box" id="curl-contract-call"></div>
+
+                      <div class="response-label" style="margin-top: 10px;">Server Response Body</div>
+                      <div class="code-box" id="body-contract-call"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==========================================================================
+         FASTAPI LOG / FEEDBACK CONSOLE
+         ========================================================================== -->
+    <div class="console-dock">
+      <div class="console-header">
+        <span>CONSOLE OUTPUT / LOG STREAM</span>
+        <button onclick="clearTerminalLogs()" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 11px;">
+          Clear Logs
+        </button>
+      </div>
+      <div class="console-logs" id="console-logs">
+        <!-- Live logs printed here -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==========================================================================
+       FASTAPI SWAGGER AUTHORIZATION MODAL (Ed25519)
+       ========================================================================== -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="swagger-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Available authorizations</h3>
+        <button class="modal-close" onclick="closeAuthModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="auth-scope-box">
+          <div class="auth-scope-title">Ed25519KeyAuth (apiKey / Cryptographic Signature)</div>
+          <div class="auth-scope-desc">
+            Provide your Ed25519 public and private keypair to sign node RPC transactions and authenticate calls.
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: var(--text-dark);">
+              ed25519_public_key <span style="color: #f93e3e;">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="modal-pubkey" 
+              class="form-control mono" 
+              placeholder="0x8a92f0853bb4d6438816f1fc4ecf9cc874291823... (64 hex)"
+            />
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: var(--text-dark);">
+              ed25519_private_key <span style="color: #f93e3e;">*</span>
+            </label>
+            <input 
+              type="password" 
+              id="modal-privkey" 
+              class="form-control mono" 
+              placeholder="0x6e8bc31f9d45e03947ca79116e0129bc48102938... (64 or 128 hex)"
+            />
+          </div>
+
+          <button class="btn-clear" style="font-size: 12px;" onclick="generateDemoKeypair()">
+            ⚡ Generate Demo Ed25519 Keypair
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-clear" onclick="logoutAuth()">Logout</button>
+        <button class="btn-execute post-btn" style="padding: 8px 24px;" onclick="saveAuthModal()">Authorize</button>
+        <button class="btn-clear" onclick="closeAuthModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main ES Module Script -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

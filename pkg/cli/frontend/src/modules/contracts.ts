@@ -3,19 +3,54 @@
  * Handles ABI-driven dynamic parameter inputs, Ed25519 signing intercept, and POST /contract/call
  */
 import { CONFIG } from '../config.ts';
-import { CONTRACT_ABIS, ContractABIFunction } from '../data/abi.ts';
 import { state } from '../state.ts';
 import { logConsole } from '../utils/logger.ts';
+
+export interface ContractInput {
+  name: string;
+  type: string;
+  default?: string;
+}
+
+export interface ContractFunction {
+  name: string;
+  description: string;
+  inputs: ContractInput[];
+}
+
+export interface ContractSpec {
+  name: string;
+  functions: ContractFunction[];
+}
+
+export type ContractsABIMap = Record<string, ContractSpec>;
+
+// Helper function để lấy ABI map từ window hoặc fallback về object rỗng
+function getContractAbis(): ContractsABIMap {
+  return window.contractAbi || {};
+}
 
 export function initContractDropdowns(): void {
   const contractSelect = document.getElementById('contract-select') as HTMLSelectElement;
   if (!contractSelect) return;
   contractSelect.innerHTML = '';
 
-  Object.keys(CONTRACT_ABIS).forEach((key) => {
+  const abis = getContractAbis();
+  const keys = Object.keys(abis);
+  console.log(abis, keys)
+
+  if (keys.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No contracts available';
+    contractSelect.appendChild(opt);
+    return;
+  }
+
+  keys.forEach((key) => {
     const opt = document.createElement('option');
     opt.value = key;
-    opt.textContent = CONTRACT_ABIS[key].name;
+    opt.textContent = abis[key].name || key;
     contractSelect.appendChild(opt);
   });
 
@@ -27,16 +62,19 @@ export function handleContractChange(): void {
   if (!contractSelect) return;
 
   state.selectedContract = contractSelect.value;
-  const contract = CONTRACT_ABIS[state.selectedContract];
+  const abis = getContractAbis();
+  const contract = abis[state.selectedContract];
 
   const fnSelect = document.getElementById('function-select') as HTMLSelectElement;
   if (!fnSelect) return;
   fnSelect.innerHTML = '';
 
+  if (!contract || !contract.functions) return;
+
   contract.functions.forEach((fn) => {
     const opt = document.createElement('option');
     opt.value = fn.name;
-    opt.textContent = `${fn.name}(...) - ${fn.description}`;
+    opt.textContent = `${fn.name}(...) - ${fn.description || ''}`;
     fnSelect.appendChild(opt);
   });
 
@@ -56,10 +94,13 @@ export function renderDynamicInputs(): void {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  const contract = CONTRACT_ABIS[state.selectedContract];
-  const fn = contract.functions.find((f: ContractABIFunction) => f.name === state.selectedFunction);
+  const abis = getContractAbis();
+  const contract = abis[state.selectedContract];
+  if (!contract || !contract.functions) return;
 
-  if (!fn || fn.inputs.length === 0) {
+  const fn = contract.functions.find((f: ContractFunction) => f.name === state.selectedFunction);
+
+  if (!fn || !fn.inputs || fn.inputs.length === 0) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td colspan="2" style="color: var(--text-muted); font-style: italic;">Function takes no input parameters.</td>`;
     tbody.appendChild(tr);
@@ -78,7 +119,7 @@ export function renderDynamicInputs(): void {
           type="text" 
           id="dyn-param-${inp.name}" 
           class="form-control mono" 
-          value="${inp.default}" 
+          value="${inp.default || ''}" 
           placeholder="Enter ${inp.type} value..."
           required
         />
@@ -97,12 +138,15 @@ export function executeSignAndSendContract(): void {
     return;
   }
 
-  const contract = CONTRACT_ABIS[state.selectedContract];
-  const fn = contract.functions.find((f: ContractABIFunction) => f.name === state.selectedFunction);
+  const abis = getContractAbis();
+  const contract = abis[state.selectedContract];
+  if (!contract) return;
+
+  const fn = contract.functions.find((f: ContractFunction) => f.name === state.selectedFunction);
 
   // Extract dynamic parameters
   const params: Record<string, string> = {};
-  if (fn) {
+  if (fn && fn.inputs) {
     fn.inputs.forEach((inp) => {
       const inputEl = document.getElementById(`dyn-param-${inp.name}`) as HTMLInputElement;
       if (inputEl) {
@@ -119,7 +163,6 @@ export function executeSignAndSendContract(): void {
 
   // Build Raw Transaction Payload
   const rawTx = {
-    contract_address: contract.address,
     function_name: state.selectedFunction,
     parameters: params,
     gas_limit: gasLimit,
@@ -127,16 +170,6 @@ export function executeSignAndSendContract(): void {
     sender_pubkey: state.auth.publicKey,
     timestamp: Math.floor(Date.now() / 1000)
   };
-
-  /*
-   * =========================================================================================
-   * PLACEHOLDER: Insert Ed25519 signature computation here before POST request to the API.
-   * Example:
-   * const messageBytes = new TextEncoder().encode(JSON.stringify(rawTx));
-   * const signature = await ed25519.sign(messageBytes, hexToBytes(state.auth.privateKey));
-   * signedTxPayload.signature = bytesToHex(signature);
-   * =========================================================================================
-   */
 
   // Simulated Ed25519 cryptographic signature digest
   const mockSignature = '0x' + Array.from({ length: 128 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -155,7 +188,6 @@ export function executeSignAndSendContract(): void {
     code: 200,
     tx_hash: mockTxHash,
     block_number: 4892109,
-    contract_address: contract.address,
     function_invoked: state.selectedFunction,
     gas_used: Math.floor(gasLimit * 0.68),
     execution_output: {
@@ -163,7 +195,6 @@ export function executeSignAndSendContract(): void {
       events_emitted: [
         {
           event: `${state.selectedFunction.toUpperCase()}_EXECUTED`,
-          emitter: contract.address,
           caller: state.auth.publicKey.slice(0, 20) + '...'
         }
       ]
@@ -178,11 +209,7 @@ export function executeSignAndSendContract(): void {
 
   if (payloadBox) payloadBox.textContent = JSON.stringify(signedPayload, null, 2);
   if (curlBox) {
-    curlBox.textContent = `curl -X 'POST' '${url}' \\
-  -H 'accept: application/json' \\
-  -H 'Content-Type: application/json' \\
-  -H 'X-Ed25519-Signature: ${mockSignature.slice(0, 32)}...' \\
-  -d '${JSON.stringify(signedPayload)}'`;
+    curlBox.textContent = `curl -X 'POST' '${url}' \\\n  -H 'accept: application/json' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Ed25519-Signature: ${mockSignature.slice(0, 32)}...' \\\n  -d '${JSON.stringify(signedPayload)}'`;
   }
   if (bodyBox) bodyBox.textContent = JSON.stringify(receipt, null, 2);
   if (responsesWrapper) responsesWrapper.style.display = 'block';

@@ -23,7 +23,8 @@ import {
   initContractDropdowns, 
   handleContractChange, 
   handleFunctionChange, 
-  executeSignAndSendContract 
+  executeSignAndSendContract, 
+  ContractsABIMap
 } from './modules/contracts.ts';
 
 // UI Helpers
@@ -60,6 +61,9 @@ export function filterTag(tag: 'peers' | 'contracts'): void {
     if (secContracts) secContracts.style.display = 'block';
     if (tabContracts) tabContracts.classList.add('active');
   }
+  const url = new URL(window.location.href);
+  url.searchParams.set('tab', tag);
+  window.history.pushState({}, '', url.toString());
 }
 
 async function fetchNodeConfig() {
@@ -67,16 +71,16 @@ async function fetchNodeConfig() {
         const response = await fetch('/api/config');
         const data = await response.json();
         
-        // Biến targetNode từ Go chính là data.TargetNode ở đây!
-        const targetNode = data.TargetNode;
+        window.KHOAI_TARGET_NODE = data.TargetNode;
         
-        console.log("Đã lấy được Target Node từ Go:", targetNode);
+        console.log("Retrieved the Target Node from Go:", data.TargetNode);
         
-        // Lưu vào biến toàn cục hoặc sử dụng trực tiếp để gọi API tới node
-        window.KHOAI_TARGET_NODE = targetNode;
+
+        window.contractAbi = data.contract
+        initContractDropdowns();
         
     } catch (err) {
-        console.error("Không thể lấy cấu hình từ Go backend:", err);
+        console.error("Unable to retrieve configuration from the Go backend:", err);
     }
 }
 
@@ -101,6 +105,7 @@ declare global {
     executeSignAndSendContract: typeof executeSignAndSendContract;
     clearTerminalLogs: typeof clearTerminalLogs;
     KHOAI_TARGET_NODE: string;
+    contractAbi: ContractsABIMap;
   }
 }
 
@@ -126,10 +131,13 @@ window.clearTerminalLogs = clearTerminalLogs;
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initAuth();
-  initContractDropdowns();
+  fetchNodeConfig();
   updatePeersDropdown();
-  filterTag('peers');
-  fetchNodeConfig()
+
+  const params = new URLSearchParams(window.location.search);
+  const activeTab = (params.get('tab') as 'peers' | 'contracts') || 'peers';
+  
+  filterTag(activeTab);
 
   logConsole('info', `FastAPI Swagger UI initialized. Target node: ${CONFIG.TARGET_NODE}`);
 });

@@ -16,7 +16,7 @@
 <body>
 
   <!-- ==========================================================================
-       FASTAPI TOP NAVIGATION BAR
+       KHOAI-CHAIN TOP NAVIGATION BAR
        ========================================================================== -->
   <header class="topbar">
     <div class="topbar-wrapper">
@@ -25,8 +25,7 @@
           <circle cx="12" cy="12" r="11" fill="#009688"/>
           <path d="M12 4L6 14H11L10 20L18 10H13L14 4H12Z" fill="white"/>
         </svg>
-        <span>FastAPI</span>
-        <span class="topbar-logo-badge">Node Commander</span>
+        <span>Khoai-Chain</span>
       </a>
 
       <div class="topbar-actions">
@@ -39,7 +38,7 @@
   </header>
 
   <!-- ==========================================================================
-       FASTAPI SWAGGER UI MAIN CONTAINER
+       KHOAI-CHAIN SWAGGER UI MAIN CONTAINER
        ========================================================================== -->
   <div class="swagger-ui">
     
@@ -72,9 +71,6 @@
 
     <!-- Tag Filter Tabs (Peers / Contracts) -->
     <div class="tag-tabs">
-      <button class="tag-tab-btn active" id="tab-all" onclick="filterTag('all')">
-        All Endpoints
-      </button>
       <button class="tag-tab-btn" id="tab-peers" onclick="filterTag('peers')">
         peers <span class="tag-badge-count" id="peers-count-tag">3</span>
       </button>
@@ -387,7 +383,7 @@
           </table>
 
           <!-- Gas & Nonce -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <!-- <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
             <div>
               <label style="font-size: 12px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">gas_limit (integer)</label>
               <input type="number" id="input-gas-limit" class="form-control mono" value="250000" />
@@ -396,11 +392,11 @@
               <label style="font-size: 12px; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px;">nonce (integer)</label>
               <input type="number" id="input-nonce" class="form-control mono" value="42" />
             </div>
-          </div>
+          </div> -->
 
           <div class="execute-wrapper">
             <button class="btn-execute post-btn" onclick="executeSignAndSendContract()">
-              ✍️ Sign & Send (POST {{.TargetNode}}/contract/call)
+              Sign & Send
             </button>
             <button class="btn-clear" onclick="clearResponses('contract-call')">Clear</button>
           </div>
@@ -441,7 +437,7 @@
     </div>
 
     <!-- ==========================================================================
-         FASTAPI LOG / FEEDBACK CONSOLE
+         KHOAI-CHAIN LOG / FEEDBACK CONSOLE
          ========================================================================== -->
     <div class="console-dock">
       <div class="console-header">
@@ -458,7 +454,7 @@
   </div>
 
   <!-- ==========================================================================
-       FASTAPI SWAGGER AUTHORIZATION MODAL (Ed25519)
+       KHOAI-CHAIN SWAGGER AUTHORIZATION MODAL (Ed25519)
        ========================================================================== -->
   <div id="auth-modal" class="modal-backdrop hidden">
     <div class="swagger-modal">

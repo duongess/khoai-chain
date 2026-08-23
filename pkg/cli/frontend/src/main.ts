@@ -42,22 +42,16 @@ export function clearResponses(id: string): void {
   if (el) el.style.display = 'none';
 }
 
-export function filterTag(tag: 'all' | 'peers' | 'contracts'): void {
+export function filterTag(tag: 'peers' | 'contracts'): void {
   const secPeers = document.getElementById('section-peers');
   const secContracts = document.getElementById('section-contracts');
-  const tabAll = document.getElementById('tab-all');
   const tabPeers = document.getElementById('tab-peers');
   const tabContracts = document.getElementById('tab-contracts');
 
-  if (tabAll) tabAll.classList.remove('active');
   if (tabPeers) tabPeers.classList.remove('active');
   if (tabContracts) tabContracts.classList.remove('active');
 
-  if (tag === 'all') {
-    if (secPeers) secPeers.style.display = 'block';
-    if (secContracts) secContracts.style.display = 'block';
-    if (tabAll) tabAll.classList.add('active');
-  } else if (tag === 'peers') {
+  if (tag === 'peers') {
     if (secPeers) secPeers.style.display = 'block';
     if (secContracts) secContracts.style.display = 'none';
     if (tabPeers) tabPeers.classList.add('active');
@@ -66,6 +60,24 @@ export function filterTag(tag: 'all' | 'peers' | 'contracts'): void {
     if (secContracts) secContracts.style.display = 'block';
     if (tabContracts) tabContracts.classList.add('active');
   }
+}
+
+async function fetchNodeConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        
+        // Biến targetNode từ Go chính là data.TargetNode ở đây!
+        const targetNode = data.TargetNode;
+        
+        console.log("Đã lấy được Target Node từ Go:", targetNode);
+        
+        // Lưu vào biến toàn cục hoặc sử dụng trực tiếp để gọi API tới node
+        window.KHOAI_TARGET_NODE = targetNode;
+        
+    } catch (err) {
+        console.error("Không thể lấy cấu hình từ Go backend:", err);
+    }
 }
 
 // Attach functions to global window for inline HTML onclick/onchange handlers
@@ -88,6 +100,7 @@ declare global {
     handleFunctionChange: typeof handleFunctionChange;
     executeSignAndSendContract: typeof executeSignAndSendContract;
     clearTerminalLogs: typeof clearTerminalLogs;
+    KHOAI_TARGET_NODE: string;
   }
 }
 
@@ -115,6 +128,8 @@ window.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initContractDropdowns();
   updatePeersDropdown();
+  filterTag('peers');
+  fetchNodeConfig()
 
   logConsole('info', `FastAPI Swagger UI initialized. Target node: ${CONFIG.TARGET_NODE}`);
 });

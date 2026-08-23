@@ -822,6 +822,31 @@ func GenContract(cfg *BuilderConfig, abiDir string) error {
 		node, err := parser.ParseFile(fset, srcPath, nil, parser.AllErrors)
 		var functions []FunctionABI
 
+		// 1. Quet AST de tim ten Struct public dau tien lam ten Contract
+		contractName := ""
+		if err == nil {
+			for _, decl := range node.Decls {
+				genDecl, ok := decl.(*ast.GenDecl)
+				if ok && genDecl.Tok == token.TYPE {
+					for _, spec := range genDecl.Specs {
+						typeSpec, ok := spec.(*ast.TypeSpec)
+						if ok && typeSpec.Name.IsExported() {
+							if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+								if contractName == "" {
+									contractName = typeSpec.Name.Name
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback ve ten file neu khong tim thay struct nao
+		if contractName == "" {
+			contractName = strings.TrimSuffix(filepath.Base(cc.Path), filepath.Ext(cc.Path))
+		}
+
 		if err == nil {
 			for _, decl := range node.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
@@ -847,7 +872,6 @@ func GenContract(cfg *BuilderConfig, abiDir string) error {
 								})
 							}
 						} else {
-							// Trường hợp tham số ẩn danh
 							inputs = append(inputs, FunctionParameter{
 								Name: "arg",
 								Type: typeName,
@@ -864,7 +888,6 @@ func GenContract(cfg *BuilderConfig, abiDir string) error {
 			}
 		}
 
-		contractName := strings.TrimSuffix(filepath.Base(cc.Path), filepath.Ext(cc.Path))
 		allABIs[contractName] = map[string]interface{}{
 			"name":      contractName,
 			"functions": functions,
@@ -880,7 +903,6 @@ func GenContract(cfg *BuilderConfig, abiDir string) error {
 	return os.WriteFile(outputFile, jsonBytes, 0644)
 }
 
-// Hàm phụ trợ để chuyển đổi kiểu AST Expr thành chuỗi dạng text
 func exprToString(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:

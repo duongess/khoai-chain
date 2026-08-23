@@ -335,3 +335,22 @@ func generateWorkspaceCompose(composePath string) error {
 	fmt.Println("Generated workspace docker-compose.yaml")
 	return nil
 }
+
+func getContractAbi(targetDir string) (interface{}, error) {
+	filePath := filepath.Join(targetDir, "contracts_abi.json")
+
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]interface{}{}, nil
+		}
+		return nil, fmt.Errorf("failed to read contracts_abi.json: %w", err)
+	}
+
+	var result interface{}
+	if err := json.Unmarshal(fileData, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse contracts_abi.json: %w", err)
+	}
+
+	return result, nil
+}

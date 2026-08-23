@@ -19,7 +19,7 @@ type response struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func RunUI(targetNode string) error {
+func RunUI(targetNode string, contract interface{}) error {
 	// 1. Initialize embedded file system for static UI assets
 	distFS, err := fs.Sub(uiFiles, "frontend/dist")
 	if err != nil {
@@ -34,8 +34,9 @@ func RunUI(targetNode string) error {
 	// 3. Config API endpoint
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		json.NewEncoder(w).Encode(map[string]interface{}{
 			"TargetNode": targetNode,
+			"contract":   contract,
 		})
 	})
 

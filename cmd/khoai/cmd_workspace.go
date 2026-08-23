@@ -105,10 +105,21 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string, groupName string
 
 	app.AddCommand("dev", "Start local web interface for testing contract and peers management", func(args []string) error {
 		var targetNode = ":8080"
+		isMultiOrg, err := isWorkspaceOrganizations()
+		if err != nil {
+			return err
+		}
+		var contractAbi interface{}
+		if isMultiOrg {
+			contractAbi, err = getContractAbi(config.BuildDir)
+		} else {
+			contractAbi, err = getContractAbi("./")
+		}
+
 		if len(args) > 0 {
 			targetNode = args[0]
 			fmt.Printf("Start connecting to %v\n", targetNode)
 		}
-		return cli.RunUI(targetNode)
+		return cli.RunUI(targetNode, contractAbi)
 	}, groupName)
 }

@@ -12,7 +12,7 @@ import (
 func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 	// Lệnh 'start' để build và khởi động node(s) bằng Docker Compose.
 	app.AddCommand("start", "Build and start node(s) using Docker Compose", func(args []string) error {
-		isWorkspace, err := isWorkspaceContext()
+		isWorkspace, err := isWorkspaceOrganizations()
 		if err != nil {
 			return err
 		}
@@ -59,7 +59,7 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToStop := args[0]
 
-		isWorkspace, err := isWorkspaceContext()
+		isWorkspace, err := isWorkspaceOrganizations()
 		if err != nil {
 			return fmt.Errorf(err.Error())
 		}
@@ -90,7 +90,7 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToLog := args[0]
 
-		isWorkspace, err := isWorkspaceContext()
+		isWorkspace, err := isWorkspaceOrganizations()
 		if err != nil {
 			return fmt.Errorf(err.Error())
 		}

@@ -37,7 +37,6 @@ func NewServer(endpoint string, contracts *contract.ContractManager) *Server {
 		httpMux:      http.NewServeMux(),
 		stopCh:       make(chan struct{}),
 	}
-	s.registerHTTPEndpoints()
 	contracts.OnBlockMined = func(newBlock *core.Block) {
 		s.BroadcastNewBlock(newBlock)
 	}
@@ -60,12 +59,6 @@ func (s *Server) ConfigurePersistence(conf *config.ConfigContent, configPath str
 		}
 		if conf.P2PListenEndpoint != "" {
 			s.P2PListenEndpoint = conf.P2PListenEndpoint
-		}
-		if conf.HTTPListenEndpoint != "" {
-			s.HTTPListenEndpoint = conf.HTTPListenEndpoint
-		}
-		if conf.HTTPEndpoint != "" {
-			s.HTTPEndpoint = conf.HTTPEndpoint
 		}
 	}
 }

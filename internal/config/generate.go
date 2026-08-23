@@ -258,11 +258,6 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 
 // GenerateNodeArtifacts creates the config.yaml, Dockerfile, and main.go for a single node.
 func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
-	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(BuildDir, ".version"))
-	if err != nil {
-		return err
-	}
-
 	// Collect all peer endpoints from the main builder config
 	var allPeerEndpoints []string
 	for _, otherOrg := range cfg.Organizations {
@@ -291,7 +286,6 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	httpPort := "9000"
 
 	finalConfig := ConfigContent{
 		NodeName:     uniqueNodeName,
@@ -302,8 +296,6 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
-	finalConfig.HTTPListenEndpoint = fmt.Sprintf("0.0.0.0:%s", httpPort)
-	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, httpPort)
 	finalConfig.P2PListenEndpoint = fmt.Sprintf("0.0.0.0:%s", p2pPort)
 	finalConfig.P2PEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort)
 	finalConfig.Permission = org.Permission
@@ -332,7 +324,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc "build/". Goi truc tiep den dist/
-COPY dist/{{.SourceArchive}} ./src.zip
+COPY dist/khoai-src-*.zip ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -349,19 +341,17 @@ COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.HTTPPort}} {{.P2PPort}}
+EXPOSE {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"HTTPPort":      httpPort,
-		"P2PPort":       p2pPort,
-		"ImageBase":     cfg.Docker.ImageBase,
-		"OrgName":       sanitize(org.DisplayName),
-		"NodeID":        node.ID,
-		"SourceArchive": sourceArchive,
+		"P2PPort":   p2pPort,
+		"ImageBase": cfg.Docker.ImageBase,
+		"OrgName":   sanitize(org.DisplayName),
+		"NodeID":    node.ID,
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -376,31 +366,22 @@ CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yam
 // GenerateWorkspaceNodeArtifacts creates artifacts for a node within a workspace context.
 // The key difference is the Dockerfile paths, which are relative to the workspace root.
 func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
-	workspaceDir := filepath.Dir(filepath.Dir(nodeDir))
-	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(workspaceDir, ".version"))
-	if err != nil {
-		return err
-	}
-
 	// A. Generate config.yaml for this node (to be included in the Image)
 	_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	httpPort := "9000"
 
 	finalConfig := ConfigContent{
-		NodeName:           uniqueNodeName,
-		DBPath:             "/app/data",
-		Organization:       org.DisplayName,
-		NodeID:             node.ID,
-		DisplayName:        node.DisplayName,
-		HTTPListenEndpoint: fmt.Sprintf("0.0.0.0:%s", httpPort),
-		HTTPEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, httpPort),
-		P2PListenEndpoint:  fmt.Sprintf("0.0.0.0:%s", p2pPort),
-		P2PEndpoint:        fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
-		Permission:         org.Permission,
-		IdentityPath:       "/app/identity",
+		NodeName:          uniqueNodeName,
+		DBPath:            "/app/data",
+		Organization:      org.DisplayName,
+		NodeID:            node.ID,
+		DisplayName:       node.DisplayName,
+		P2PListenEndpoint: fmt.Sprintf("0.0.0.0:%s", p2pPort),
+		P2PEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
+		Permission:        org.Permission,
+		IdentityPath:      "/app/identity",
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -427,7 +408,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc workspace. Goi truc tiep den dist/
-COPY dist/{{.SourceArchive}} ./src.zip
+COPY dist/khoai-src-*.zip ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -444,18 +425,16 @@ COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.HTTPPort}} {{.P2PPort}}
+EXPOSE {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeID":        node.ID,
-		"HTTPPort":      httpPort,
-		"P2PPort":       p2pPort,
-		"ImageBase":     cfg.Docker.ImageBase,
-		"SourceArchive": sourceArchive,
+		"NodeID":    node.ID,
+		"P2PPort":   p2pPort,
+		"ImageBase": cfg.Docker.ImageBase,
 	}
 
 	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)
@@ -548,7 +527,6 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.P2PPort}}:{{.P2PPort}}"
-      - "{{.HTTPPort}}:9000"
     expose:
       - "{{.P2PPort}}"
       - "9000"
@@ -631,7 +609,6 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.P2PPort}}:{{.P2PPort}}"
-      - "{{.HTTPPort}}:9000"
     expose:
       - "{{.P2PPort}}"
       - "9000"
@@ -665,7 +642,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -728,14 +704,7 @@ func main() {
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 6. Initialize HTTP Control Plane
-	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
-	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
-	go func() {
-		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
-	}()
-
-	// 7. Block main thread to keep the server running forever
+	// 5. Block main thread to keep the server running forever
 	select {}
 }
 	`

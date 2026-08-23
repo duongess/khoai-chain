@@ -85,6 +85,7 @@ type CommandPeer struct {
 // Response returned to Client
 type ResponseMessage struct {
 	Status string `json:"status"`
-	Result string `json:"result"`
+	TxId   string `json:"tx_id,omitempty"`
+	Result any    `json:"result"`
 	Error  string `json:"error,omitempty"`
 }

@@ -21,12 +21,10 @@ type ConfigContent struct {
 	Permission   string            `yaml:"permission"`
 	// Endpoint is retained for old runtime configs; new configs use the four
 	// explicit control-plane/data-plane addresses below.
-	Endpoint           string   `yaml:"endpoint,omitempty"`
-	HTTPListenEndpoint string   `yaml:"http_listen,omitempty"`
-	HTTPEndpoint       string   `yaml:"http_endpoint,omitempty"`
-	P2PListenEndpoint  string   `yaml:"p2p_listen,omitempty"`
-	P2PEndpoint        string   `yaml:"p2p_endpoint,omitempty"`
-	Peers              []string `yaml:"peers,omitempty"`
+	Endpoint          string   `yaml:"endpoint,omitempty"`
+	P2PListenEndpoint string   `yaml:"p2p_listen,omitempty"`
+	P2PEndpoint       string   `yaml:"p2p_endpoint,omitempty"`
+	Peers             []string `yaml:"peers,omitempty"`
 }
 
 func LoadConfig(filePath string) (*ConfigContent, error) {

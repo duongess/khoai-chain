@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -67,13 +66,6 @@ func main() {
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 6. Initialize HTTP Control Plane
-	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
-	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
-	go func() {
-		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
-	}()
-
-	// 7. Block main thread to keep the server running forever
+	// 5. Block main thread to keep the server running forever
 	select {}
 }

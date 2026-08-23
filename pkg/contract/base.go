@@ -1,10 +1,10 @@
 package contract
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
 // BaseContract: Parent class (for clients to inherit)
@@ -39,7 +39,7 @@ func (b *BaseContract) Save(key string, data interface{}) error {
 	}
 
 	// 1. Convert Struct -> TOML Bytes
-	bytesData, err := toml.Marshal(data)
+	bytesData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("error creating TOML: %v", err)
 	}
@@ -53,25 +53,30 @@ func (b *BaseContract) Save(key string, data interface{}) error {
 	return nil
 }
 
-// Get: Reads from DB and populates a struct (target must be a pointer)
 func (b *BaseContract) Get(key string, target interface{}) error {
 	if b.Ctx == nil {
 		return fmt.Errorf("not connected to Database")
 	}
 
-	// 1. Create namespace key
-	realKey := fmt.Sprintf("%s_%s", b.Name, key)
-
-	// 2. Get raw data from DB
-	bytesData, err := b.Ctx.GetState(realKey)
-	if err != nil {
-		return err // Not found or DB error
+	rv := reflect.ValueOf(target)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return errors.New("target must be a non-nil pointer")
 	}
 
-	// 3. Convert TOML Bytes -> Struct
-	err = toml.Unmarshal(bytesData, target)
+	realKey := fmt.Sprintf("%s_%s", b.Name, key)
+
+	bytesData, err := b.Ctx.GetState(realKey)
 	if err != nil {
-		return fmt.Errorf("data in DB is not valid TOML: %v", err)
+		return err
+	}
+
+	if len(bytesData) == 0 {
+		return fmt.Errorf("key '%s' not found in state", key)
+	}
+
+	err = json.Unmarshal(bytesData, target)
+	if err != nil {
+		return fmt.Errorf("data in DB is not valid JSON: %v", err)
 	}
 
 	return nil

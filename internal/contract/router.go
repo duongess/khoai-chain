@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -11,7 +10,7 @@ import (
 type Router struct{}
 
 // CallMethod
-func (r *Router) CallMethod(app interface{}, sender, methodName string, args []string) ([]byte, error, error) {
+func (r *Router) CallMethod(app interface{}, sender, methodName string, args []string) (any, error, error) {
 	// 1. Get information about the App object (Reflection)
 	val := reflect.ValueOf(app)
 
@@ -53,27 +52,20 @@ func (r *Router) CallMethod(app interface{}, sender, methodName string, args []s
 	results := method.Call(inputArgs)
 
 	// 5. Process the return results
-	var resBytes []byte
+	var resData any
 	var err error
 
 	if len(results) == 1 {
 		if results[0].IsValid() && !results[0].IsZero() {
 			if e, ok := results[0].Interface().(error); ok {
 				err = e
+			} else {
+				resData = results[0].Interface()
 			}
 		}
 	} else if len(results) >= 2 {
-		if results[0].IsValid() && !results[0].IsZero() {
-			switch v := results[0].Interface().(type) {
-			case []byte:
-				resBytes = v
-			case string:
-				resBytes = []byte(v)
-			case []string:
-				resBytes, _ = json.Marshal(v)
-			default:
-				resBytes, _ = json.Marshal(v)
-			}
+		if results[0].IsValid() {
+			resData = results[0].Interface()
 		}
 
 		if results[1].IsValid() && !results[1].IsZero() {
@@ -83,5 +75,5 @@ func (r *Router) CallMethod(app interface{}, sender, methodName string, args []s
 		}
 	}
 
-	return resBytes, err, nil
+	return resData, err, nil
 }

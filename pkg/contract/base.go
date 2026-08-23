@@ -33,7 +33,7 @@ func (b *BaseContract) GetName() []byte {
 }
 
 // Save: Saves any struct to the DB as TOML
-func (b *BaseContract) Save(key []byte, data interface{}) error {
+func (b *BaseContract) Save(key string, data interface{}) error {
 	if b.Ctx == nil {
 		return fmt.Errorf("not connected to Database (Ctx is nil)")
 	}
@@ -54,7 +54,7 @@ func (b *BaseContract) Save(key []byte, data interface{}) error {
 }
 
 // Get: Reads from DB and populates a struct (target must be a pointer)
-func (b *BaseContract) Get(key []byte, target interface{}) error {
+func (b *BaseContract) Get(key string, target interface{}) error {
 	if b.Ctx == nil {
 		return fmt.Errorf("not connected to Database")
 	}

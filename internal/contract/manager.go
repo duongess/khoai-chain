@@ -62,7 +62,7 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 	fmt.Printf("Smart Contract loaded: %s\n", name)
 }
 
-func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) ([]byte, error, error) {
+func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) (any, error, error) {
 	cm.stagingState = make(map[string][]byte)
 
 	cm.currentSender = payload.Sender
@@ -87,7 +87,7 @@ func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) ([]byte, error, e
 }
 
 // Execute: Run logic -> Create Tx -> Mine Block
-func (cm *ContractManager) Execute(payload core.TxPayload) ([]byte, *core.Transaction, *core.Block, error, error) {
+func (cm *ContractManager) Execute(payload core.TxPayload) (any, *core.Transaction, *core.Block, error, error) {
 	result, errContract, err := cm.ExecuteOnly(payload)
 	if err != nil {
 		return nil, nil, nil, errContract, err

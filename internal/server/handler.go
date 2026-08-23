@@ -153,7 +153,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		} else if errContract != nil {
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
-			resp = ResponseMessage{Status: "Success", TxId: tx.ID, Result: string(result)}
+			resp = ResponseMessage{Status: "Success", TxId: tx.ID, Result: result}
 			if minedBlock == nil {
 				// tx is still pending — gossip it so peers' mempools stay in sync
 				s.BroadcastNewTransaction(tx)

@@ -16,7 +16,7 @@ type ContractManager struct {
 	permission    string
 
 	OnBlockMined func(block *core.Block)
-	stagingState map[string][]byte
+	StagingState map[string][]byte
 }
 
 func NewManager(chain *core.Blockchain) *ContractManager {
@@ -28,11 +28,11 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 }
 
 func (cm *ContractManager) PutState(key string, value []byte) {
-	cm.stagingState[key] = value
+	cm.StagingState[key] = value
 }
 
 func (cm *ContractManager) GetState(key string) ([]byte, error) {
-	if val, ok := cm.stagingState[key]; ok {
+	if val, ok := cm.StagingState[key]; ok {
 		return val, nil
 	}
 	return cm.Chain.DB.GetData([]byte(key))
@@ -43,11 +43,12 @@ func (cm *ContractManager) GetSender() string {
 }
 
 func (cm *ContractManager) Commit() error {
-	for k, v := range cm.stagingState {
+	for k, v := range cm.StagingState {
 		if err := cm.Chain.DB.SetData([]byte(k), v); err != nil {
 			return err
 		}
 	}
+	cm.StagingState = make(map[string][]byte)
 	return nil
 }
 
@@ -63,8 +64,6 @@ func (cm *ContractManager) RegisterApp(app sdk.SmartContract) {
 }
 
 func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) (any, error, error) {
-	cm.stagingState = make(map[string][]byte)
-
 	cm.currentSender = payload.Sender
 	cm.permission = core.PublicKeyPeers[payload.Sender]
 
@@ -79,7 +78,7 @@ func (cm *ContractManager) ExecuteOnly(payload core.TxPayload) (any, error, erro
 
 	var result, errContract, err = cm.router.CallMethod(app, payload.Sender, payload.Function, payload.Args)
 	if err != nil {
-		cm.stagingState = nil
+		cm.StagingState = nil
 		return nil, nil, err
 	}
 

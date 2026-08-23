@@ -338,7 +338,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		if err != nil {
 			return errorResponse(baseMsg.Type, err.Error())
 		}
-
+		manager.StagingState = make(map[string][]byte)
 		for _, transaction := range msg.Block.Transactions {
 			pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
 			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {

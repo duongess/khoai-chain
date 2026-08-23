@@ -12,7 +12,7 @@ import (
 func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 	// Lệnh 'start' để build và khởi động node(s) bằng Docker Compose.
 	app.AddCommand("start", "Build and start node(s) using Docker Compose", func(args []string) error {
-		isWorkspace, err := isWorkspaceOrganizations()
+		isMultiOrg, err := isWorkspaceOrganizations()
 		if err != nil {
 			return err
 		}
@@ -21,12 +21,12 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		if len(args) > 0 {
 			nodeToStart = args[0]
 		}
-		if !isWorkspace && nodeToStart == "" {
+		if !isMultiOrg && nodeToStart == "" {
 			return fmt.Errorf("invalid command. A node name or 'all' is required. Example: khoai start node_vingroup | khoai start all")
 		}
 
 		var composeFile string
-		if !isWorkspace {
+		if !isMultiOrg {
 			fmt.Println("Running in Organization Workspace context.")
 			composeFile = "docker-compose.yaml"
 		} else {
@@ -34,7 +34,7 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")
 		}
 
-		if !isWorkspace {
+		if !isMultiOrg {
 			if nodeToStart == "all" {
 				fmt.Println("\nStarting all nodes...")
 			} else {
@@ -59,12 +59,12 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToStop := args[0]
 
-		isWorkspace, err := isWorkspaceOrganizations()
+		isMultiOrg, err := isWorkspaceOrganizations()
 		if err != nil {
 			return fmt.Errorf(err.Error())
 		}
 		var composeFile string
-		if !isWorkspace {
+		if !isMultiOrg {
 			composeFile = "docker-compose.yaml"
 		} else {
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")
@@ -90,12 +90,12 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToLog := args[0]
 
-		isWorkspace, err := isWorkspaceOrganizations()
+		isMultiOrg, err := isWorkspaceOrganizations()
 		if err != nil {
 			return fmt.Errorf(err.Error())
 		}
 		var composeFile string
-		if !isWorkspace {
+		if !isMultiOrg {
 			composeFile = "docker-compose.yaml"
 		} else {
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")

@@ -76,7 +76,7 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string, groupName string
 		if err != nil {
 			return err
 		}
-		if !isWorkspace {
+		if isWorkspace {
 			return fmt.Errorf("the 'build' command can only be run inside an initialized workspace (missing organization.yaml)")
 		}
 
@@ -96,12 +96,12 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string, groupName string
 	}, groupName)
 
 	app.AddCommand("update u", "update version of khoai source code and rebuild artifacts for all nodes in the workspace", func(args []string) error {
-		isArtifacts, err := isArtifacts()
+		isWorkspaceContext, err := isWorkspaceContext()
 		if err != nil {
 			return err
 		}
 		var version string
-		if isArtifacts {
+		if isWorkspaceContext {
 			version, err = downloadViaScript("latest", "./build")
 		} else {
 			version, err = downloadViaScript("latest", ".")
@@ -183,17 +183,6 @@ func createDefaultWorkspaceFiles(dir string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, config.ConfigFileName), rootYAML, 0644)
-}
-
-// isWorkspaceContext kiểm tra xem thư mục hiện tại có phải là một workspace hay không.
-func isWorkspaceContext() (bool, error) {
-	if _, err := os.Stat("organization.yaml"); err == nil {
-		return true, nil
-	} else if os.IsNotExist(err) {
-		return false, nil
-	} else {
-		return false, err
-	}
 }
 
 // generateWorkspaceCompose tạo file docker-compose.yaml trong một workspace.

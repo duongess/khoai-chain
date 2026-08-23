@@ -45,7 +45,7 @@ func generateArtifacts(configPath string) error {
 	return nil
 }
 
-func isArtifacts() (bool, error) {
+func isWorkspaceContext() (bool, error) {
 	if _, err := os.Stat("khoai-config.yaml"); err == nil {
 		builderConf, err := config.LoadBuilderConfig("khoai-config.yaml")
 		if err != nil {

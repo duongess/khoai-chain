@@ -26,25 +26,15 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 
 		var composeFile string
-		if isWorkspace {
+		if !isWorkspace {
 			fmt.Println("Running in Organization Workspace context.")
-			fmt.Println("Preparing node artifacts for this organization...")
-			if _, err := generateWorkspaceNodeArtifacts(true); err != nil {
-				return err
-			}
 			composeFile = "docker-compose.yaml"
-			if err := generateWorkspaceCompose(composeFile); err != nil {
-				return fmt.Errorf("could not generate workspace docker-compose: %w", err)
-			}
 		} else {
 			fmt.Println("Running in Builder context.")
-			if err := generateArtifacts(configPath); err != nil {
-				return fmt.Errorf("could not generate configuration files: %w", err)
-			}
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")
 		}
 
-		if isWorkspace {
+		if !isWorkspace {
 			if nodeToStart == "all" {
 				fmt.Println("\nStarting all nodes...")
 			} else {
@@ -69,9 +59,12 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToStop := args[0]
 
-		isWorkspace, _ := isWorkspaceContext()
+		isWorkspace, err := isWorkspaceContext()
+		if err != nil {
+			return fmt.Errorf(err.Error())
+		}
 		var composeFile string
-		if isWorkspace {
+		if !isWorkspace {
 			composeFile = "docker-compose.yaml"
 		} else {
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")
@@ -97,9 +90,12 @@ func registerNodeCommands(app *cli.CLI, configPath string, groupName string) {
 		}
 		nodeToLog := args[0]
 
-		isWorkspace, _ := isWorkspaceContext()
+		isWorkspace, err := isWorkspaceContext()
+		if err != nil {
+			return fmt.Errorf(err.Error())
+		}
 		var composeFile string
-		if isWorkspace {
+		if !isWorkspace {
 			composeFile = "docker-compose.yaml"
 		} else {
 			composeFile = filepath.Join(config.BuildDir, "docker-compose.yaml")

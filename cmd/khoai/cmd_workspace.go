@@ -102,4 +102,13 @@ func registerWorkspaceCommands(app *cli.CLI, configPath string, groupName string
 		fmt.Printf("Successfully updated to version %s.\n", version)
 		return nil
 	}, groupName)
+
+	app.AddCommand("dev", "Start local web interface for testing contract and peers management", func(args []string) error {
+		var targetNode = ":8080"
+		if len(args) > 0 {
+			targetNode = args[0]
+			fmt.Printf("Start connecting to %v\n", targetNode)
+		}
+		return cli.RunUI(targetNode)
+	}, groupName)
 }

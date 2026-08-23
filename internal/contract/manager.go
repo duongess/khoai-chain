@@ -28,6 +28,9 @@ func NewManager(chain *core.Blockchain) *ContractManager {
 }
 
 func (cm *ContractManager) PutState(key string, value []byte) {
+	if cm.StagingState == nil {
+		cm.StagingState = make(map[string][]byte)
+	}
 	cm.StagingState[key] = value
 }
 

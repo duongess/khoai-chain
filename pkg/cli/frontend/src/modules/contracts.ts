@@ -255,22 +255,20 @@ export async function executeSignAndSendContract(): Promise<void> {
 
   let serverResponseResult = "";
   try {
-    const result = await sendP2p(commandMessage);
-    serverResponseResult = result.result || JSON.stringify(result);
+    const res = await sendP2p(commandMessage);
+    serverResponseResult = JSON.stringify(res, null, 2);
   } catch (err: any) {
     serverResponseResult = `Error: ${err.message}`;
   }
 
+  // Khúc dưới của bạn giữ nguyên
   const payloadBox = document.getElementById('payload-contract-call');
-  const curlBox = document.getElementById('curl-contract-call');
   const bodyBox = document.getElementById('body-contract-call');
   const responsesWrapper = document.getElementById('responses-contract-call');
 
   if (payloadBox) payloadBox.textContent = JSON.stringify(commandMessage, null, 2);
-  if (curlBox) {
-    curlBox.textContent = `curl -X 'POST' '/api/p2p/message' \\\n  -H 'accept: application/json' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(commandMessage)}'`;
-  }
-  if (bodyBox) bodyBox.textContent = serverResponseResult;
+  // ...
+  if (bodyBox) bodyBox.textContent = serverResponseResult; // Lúc này nó là 1 chuỗi JSON thật sự
   if (responsesWrapper) responsesWrapper.style.display = 'block';
 
   logConsole('tx', `POST /api/p2p/message -> ${state.selectedContract}::${state.selectedFunction}()`);

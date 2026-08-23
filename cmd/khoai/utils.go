@@ -38,6 +38,11 @@ func generateArtifacts(configPath string) error {
 		}
 	}
 
+	// New: Copy all chaincode source files to a central build/chaincodes directory
+	if err := config.GenContract(builderConf, config.BuildDir); err != nil {
+		return err
+	}
+
 	fmt.Println("- Generating main docker-compose.yaml")
 	if err := config.GenerateDockerCompose(config.BuildDir, builderConf); err != nil {
 		return fmt.Errorf("error creating docker-compose.yaml file: %w", err)
@@ -263,6 +268,10 @@ func generateWorkspaceNodeArtifacts(force bool) (int, error) {
 			return 0, fmt.Errorf("error creating files for node %s: %w", node.ID, err)
 		}
 		nodesGenerated++
+	}
+
+	if err := config.GenContract(rootConf, "./"); err != nil {
+		return 0, fmt.Errorf("could not parse workspace organization.yaml: %w", err)
 	}
 
 	return nodesGenerated, nil

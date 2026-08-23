@@ -2,7 +2,11 @@ package config
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"html/template"
 	"net"
 	"os"
@@ -111,6 +115,17 @@ type MainTemplateData struct {
 	Registrations []string
 }
 
+type FunctionABI struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Inputs      []FunctionParameter `json:"inputs"`
+}
+
+type FunctionParameter struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // GetDefaultBuilderConfig returns a default configuration for the network.
 func GetDefaultBuilderConfig() *BuilderConfig {
 	return &BuilderConfig{
@@ -181,31 +196,6 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 
 	if err := saveIdentity(orgDir); err != nil {
 		return fmt.Errorf("error saving identity: %w", err)
-	}
-
-	// New: Copy all chaincode source files to a central build/chaincodes directory
-	if len(cfg.Chaincodes) > 0 {
-		chaincodesBuildDir := filepath.Join(BuildDir, "chaincodes")
-		if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
-			return fmt.Errorf("could not create build/chaincodes directory: %w", err)
-		}
-
-		for _, cc := range cfg.Chaincodes {
-			if cc.Path == "" {
-				continue
-			}
-			srcPath := cc.Path
-			destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
-
-			input, err := os.ReadFile(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
-			}
-
-			if err := os.WriteFile(destPath, input, 0644); err != nil {
-				return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
-			}
-		}
 	}
 
 	// 2. Generate organization.yaml (contains only this org's config)
@@ -800,4 +790,108 @@ func saveIdentity(keystoreDir string) error {
 	}
 
 	return nil
+}
+
+func GenContract(cfg *BuilderConfig, abiDir string) error {
+	if len(cfg.Chaincodes) == 0 {
+		return fmt.Errorf("contract file not found.")
+	}
+	chaincodesBuildDir := filepath.Join(abiDir, "chaincodes")
+	if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
+		return fmt.Errorf("could not create build/chaincodes directory: %w", err)
+	}
+	allABIs := make(map[string]interface{})
+
+	for _, cc := range cfg.Chaincodes {
+		if cc.Path == "" {
+			continue
+		}
+		srcPath := cc.Path
+		destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
+
+		input, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
+		}
+
+		if err := os.WriteFile(destPath, input, 0644); err != nil {
+			return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
+		}
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, srcPath, nil, parser.AllErrors)
+		var functions []FunctionABI
+
+		if err == nil {
+			for _, decl := range node.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Name == nil {
+					continue
+				}
+
+				fnName := fn.Name.Name
+				if fnName[0] < 'A' || fnName[0] > 'Z' {
+					continue
+				}
+
+				var inputs []FunctionParameter
+				if fn.Type != nil && fn.Type.Params != nil {
+					for _, field := range fn.Type.Params.List {
+						typeName := exprToString(field.Type)
+
+						if len(field.Names) > 0 {
+							for _, name := range field.Names {
+								inputs = append(inputs, FunctionParameter{
+									Name: name.Name,
+									Type: typeName,
+								})
+							}
+						} else {
+							// Trường hợp tham số ẩn danh
+							inputs = append(inputs, FunctionParameter{
+								Name: "arg",
+								Type: typeName,
+							})
+						}
+					}
+				}
+
+				functions = append(functions, FunctionABI{
+					Name:        fnName,
+					Description: fmt.Sprintf("Auto-extracted function %s", fnName),
+					Inputs:      inputs,
+				})
+			}
+		}
+
+		contractName := strings.TrimSuffix(filepath.Base(cc.Path), filepath.Ext(cc.Path))
+		allABIs[contractName] = map[string]interface{}{
+			"name":      contractName,
+			"functions": functions,
+		}
+	}
+
+	jsonBytes, err := json.MarshalIndent(allABIs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal ABIs: %w", err)
+	}
+
+	outputFile := filepath.Join(abiDir, "contracts_abi.json")
+	return os.WriteFile(outputFile, jsonBytes, 0644)
+}
+
+// Hàm phụ trợ để chuyển đổi kiểu AST Expr thành chuỗi dạng text
+func exprToString(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		return exprToString(t.X) + "." + t.Sel.Name
+	case *ast.ArrayType:
+		return "[]" + exprToString(t.Elt)
+	case *ast.StarExpr:
+		return "*" + exprToString(t.X)
+	default:
+		return "unknown"
+	}
 }

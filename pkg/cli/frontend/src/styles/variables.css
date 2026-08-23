@@ -1,14 +1,14 @@
 /* ==========================================================================
-   FASTAPI & SWAGGER UI THEME VARIABLES (LIGHT & DARK MODE)
+   Khoai-Chain & SWAGGER UI THEME VARIABLES (LIGHT & DARK MODE)
    ========================================================================== */
 :root {
   --font-sans: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Source Code Pro', 'Fira Code', Menlo, Monaco, Consolas, monospace;
 
-  /* FastAPI Brand Colors */
-  --fastapi-teal: #009688;
-  --fastapi-teal-dark: #00796b;
-  --fastapi-dark: #1b242f;
+  /* Khoai-Chain Brand Colors */
+  --Khoai-Chain-teal: #009688;
+  --Khoai-Chain-teal-dark: #00796b;
+  --Khoai-Chain-dark: #1b242f;
 
   /* Swagger Method Colors */
   --method-get: #61affe;
@@ -23,7 +23,7 @@
   --method-delete-bg: rgba(249, 62, 62, 0.1);
   --method-delete-border: #f93e3e;
 
-  /* Light Theme (Classic FastAPI / Swagger UI) */
+  /* Light Theme (Classic Khoai-Chain / Swagger UI) */
   --bg-page: #fafafa;
   --bg-surface: #ffffff;
   --bg-header: #1b242f;

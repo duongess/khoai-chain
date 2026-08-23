@@ -4,7 +4,7 @@
 import { state } from '../state.ts';
 
 export function initTheme(): void {
-  const savedTheme = (localStorage.getItem('fastapi_theme') as 'light' | 'dark') || 'light';
+  const savedTheme = (localStorage.getItem('Khoai-Chain_theme') as 'light' | 'dark') || 'light';
   setTheme(savedTheme);
 }
 
@@ -16,7 +16,7 @@ export function toggleTheme(): void {
 export function setTheme(t: 'light' | 'dark'): void {
   state.theme = t;
   document.documentElement.setAttribute('data-theme', t);
-  localStorage.setItem('fastapi_theme', t);
+  localStorage.setItem('Khoai-Chain_theme', t);
 
   const themeIcon = document.getElementById('theme-icon');
   const themeText = document.getElementById('theme-text');

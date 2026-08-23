@@ -50,7 +50,7 @@ code, pre, .mono {
 }
 
 .topbar-logo-badge {
-  background-color: var(--fastapi-teal);
+  background-color: var(--Khoai-Chain-teal);
   color: white;
   font-size: 11px;
   font-weight: 700;
@@ -164,14 +164,14 @@ code, pre, .mono {
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--fastapi-teal);
+  color: var(--Khoai-Chain-teal);
   font-weight: 600;
 }
 
 .btn-authorize {
   background-color: transparent;
-  border: 2px solid var(--fastapi-teal);
-  color: var(--fastapi-teal);
+  border: 2px solid var(--Khoai-Chain-teal);
+  color: var(--Khoai-Chain-teal);
   padding: 6px 20px;
   font-size: 14px;
   font-weight: 700;
@@ -183,7 +183,7 @@ code, pre, .mono {
   transition: all 0.2s;
 }
 .btn-authorize:hover {
-  background-color: var(--fastapi-teal);
+  background-color: var(--Khoai-Chain-teal);
   color: white;
 }
 .btn-authorize.authorized {
@@ -220,7 +220,7 @@ code, pre, .mono {
   color: var(--text-dark);
 }
 .tag-tab-btn.active {
-  background-color: var(--fastapi-teal);
+  background-color: var(--Khoai-Chain-teal);
   color: #ffffff;
 }
 

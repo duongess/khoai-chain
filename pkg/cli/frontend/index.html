@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FastAPI - Node Commander & Contract API</title>
+  <title>Khoai-Chain - Node Commander & Contract API</title>
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,7 +50,7 @@
         <span class="info-oas">OAS 3.1.0</span>
       </div>
       <p class="info-description">
-        Developer-focused FastAPI documentation interface for Node Peer Management and ABI-driven Smart Contract interactions secured with <strong>Ed25519 Cryptographic Signatures</strong>.
+        Developer-focused Khoai-Chain documentation interface for Node Peer Management and ABI-driven Smart Contract interactions secured with <strong>Ed25519 Cryptographic Signatures</strong>.
       </p>
     </div>
 
@@ -58,7 +58,7 @@
     <div class="server-and-auth-bar">
       <div class="server-selector-group">
         <span class="server-label">Servers</span>
-        <span class="server-badge" id="target-node-display">{{.TargetNode}} - Target Node API</span>
+        <span class="server-badge" id="target-node-display"></span>
       </div>
 
       <div>
@@ -72,10 +72,10 @@
     <!-- Tag Filter Tabs (Peers / Contracts) -->
     <div class="tag-tabs">
       <button class="tag-tab-btn" id="tab-peers" onclick="filterTag('peers')">
-        peers <span class="tag-badge-count" id="peers-count-tag">3</span>
+        peers
       </button>
       <button class="tag-tab-btn" id="tab-contracts" onclick="filterTag('contracts')">
-        contracts <span class="tag-badge-count">1</span>
+        contracts
       </button>
     </div>
 

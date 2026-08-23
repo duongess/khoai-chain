@@ -78,6 +78,10 @@ async function fetchNodeConfig() {
 
         window.contractAbi = data.contract
         initContractDropdowns();
+        const targetElement = document.getElementById("target-node-display");
+        if (targetElement) {
+          targetElement.textContent = window.KHOAI_TARGET_NODE;
+        }
         
     } catch (err) {
         console.error("Unable to retrieve configuration from the Go backend:", err);
@@ -139,5 +143,5 @@ window.addEventListener('DOMContentLoaded', () => {
   
   filterTag(activeTab);
 
-  logConsole('info', `FastAPI Swagger UI initialized. Target node: ${CONFIG.TARGET_NODE}`);
+  logConsole('info', `Khoai-Chain Swagger UI initialized. Target node: ${CONFIG.TARGET_NODE}`);
 });

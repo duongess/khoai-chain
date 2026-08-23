@@ -2,7 +2,6 @@
  * Contract Management Module
  * Handles ABI-driven dynamic parameter inputs, Ed25519 signing intercept, and POST /contract/call
  */
-import { CONFIG } from '../config.ts';
 import { state } from '../state.ts';
 import { logConsole } from '../utils/logger.ts';
 import { sendP2p, EXECUTE } from './network.ts'
@@ -251,10 +250,6 @@ export async function executeSignAndSendContract(): Promise<void> {
     args: args,
     nonce: receivedNonce,
   } as any;
-
-  const mockSignature = '0x' + Array.from({ length: 128 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  const mockTxHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-
   const signature = await signMessageWebCrypto(state.auth.privateKey, commandMessage)
   commandMessage.signature = signature
 
@@ -278,5 +273,5 @@ export async function executeSignAndSendContract(): Promise<void> {
   if (bodyBox) bodyBox.textContent = serverResponseResult;
   if (responsesWrapper) responsesWrapper.style.display = 'block';
 
-  logConsole('tx', `POST /api/p2p/message -> ${state.selectedContract}::${state.selectedFunction}()`, mockTxHash);
+  logConsole('tx', `POST /api/p2p/message -> ${state.selectedContract}::${state.selectedFunction}()`);
 }

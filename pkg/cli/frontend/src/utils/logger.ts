@@ -1,6 +1,6 @@
 /**
  * Console Logger Utility
- * Outputs timestamped messages to the docked FastAPI console window.
+ * Outputs timestamped messages to the docked Khoai-Chain console window.
  */
 
 export type LogLevel = 'info' | 'success' | 'error' | 'tx';

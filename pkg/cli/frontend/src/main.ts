@@ -15,9 +15,7 @@ import {
 } from './modules/auth.ts';
 import { 
   updatePeersDropdown, 
-  executeGetPeers, 
-  executeAddPeer, 
-  executeRemovePeer 
+  executePeers,
 } from './modules/peers.ts';
 import { 
   initContractDropdowns, 
@@ -101,9 +99,7 @@ declare global {
     toggleTryOut: typeof toggleTryOut;
     clearResponses: typeof clearResponses;
     filterTag: typeof filterTag;
-    executeGetPeers: typeof executeGetPeers;
-    executeAddPeer: typeof executeAddPeer;
-    executeRemovePeer: typeof executeRemovePeer;
+    executePeers: typeof executePeers;
     handleContractChange: typeof handleContractChange;
     handleFunctionChange: typeof handleFunctionChange;
     executeSignAndSendContract: typeof executeSignAndSendContract;
@@ -123,9 +119,7 @@ window.toggleOpblock = toggleOpblock;
 window.toggleTryOut = toggleTryOut;
 window.clearResponses = clearResponses;
 window.filterTag = filterTag;
-window.executeGetPeers = executeGetPeers;
-window.executeAddPeer = executeAddPeer;
-window.executeRemovePeer = executeRemovePeer;
+window.executePeers = executePeers;
 window.handleContractChange = handleContractChange;
 window.handleFunctionChange = handleFunctionChange;
 window.executeSignAndSendContract = executeSignAndSendContract;

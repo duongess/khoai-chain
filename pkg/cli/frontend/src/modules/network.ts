@@ -9,9 +9,9 @@ export interface EXECUTE {
 }
 
 export interface PEER {
-    Type: string;
-    Address: string;
-    PublicKey: string;
+    type: string;
+    sender: string;
+    address: string;
 }
 
 export async function sendP2p(payload: EXECUTE | PEER): Promise<any> {

@@ -89,98 +89,67 @@
         </div>
         <div class="opblock-tag-desc">Node mesh discovery, peer connection, and multiaddr routing</div>
       </div>
-
-      <!-- ENDPOINT 1: GET /peers -->
-      <div class="opblock get is-open" id="opblock-get-peers">
-        <div class="opblock-summary" onclick="toggleOpblock('opblock-get-peers')">
-          <span class="opblock-summary-method">GET</span>
-          <span class="opblock-summary-path">/peers</span>
+      <!-- ================== 1. GET PEERS ================== -->
+      <div class="opblock get" id="opblock-peers">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-peers')">
+          <span class="opblock-summary-method" style="background-color: #61affe;">GET</span>
+          <span class="opblock-summary-path">/p2p/peers</span>
           <span class="opblock-summary-description">Get list of connected network peers</span>
           <span class="opblock-summary-arrow">▼</span>
         </div>
-
-        <div class="opblock-body">
-          <div class="opblock-section-header">
-            <span class="opblock-title">Parameters</span>
+        <div class="opblock-body hidden">
+          <div style="padding: 15px; font-size: 13px; color: var(--text-muted); font-style: italic;">
+            No input parameters required. Returns current active peer routing table.
           </div>
-
-          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-            No query parameters required. Returns current active peer routing table.
-          </div>
-
           <div class="execute-wrapper">
-            <button class="btn-execute" onclick="executeGetPeers()">Execute</button>
-            <button class="btn-clear" onclick="clearResponses('get-peers')">Clear</button>
+            <button class="btn-execute" onclick="executePeers('PEERS')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('peers')">Clear</button>
           </div>
-
-          <!-- Responses -->
-          <div class="responses-wrapper" id="responses-get-peers">
+          <div class="responses-wrapper" id="responses-peers" style="display: none;">
             <div class="response-block">
-              <div class="response-label">Responses</div>
-              <table class="parameters-table">
-                <thead>
-                  <tr>
-                    <th style="width: 100px;">Code</th>
-                    <th>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><span class="status-code-badge status-200" id="status-get-peers">200</span></td>
-                    <td>
-                      <div class="response-label" style="margin-top: 4px;">Curl</div>
-                      <div class="code-box" id="curl-get-peers">curl -X 'GET' '{{.TargetNode}}/peers' -H 'accept: application/json'</div>
-                      
-                      <div class="response-label" style="margin-top: 10px;">Request URL</div>
-                      <div class="code-box" id="url-get-peers">{{.TargetNode}}/peers</div>
-
-                      <div class="response-label" style="margin-top: 10px;">Response body</div>
-                      <div class="code-box" id="body-get-peers">[
-  {
-    "peer_id": "12D3KooWStZ1k4P8ZJ9mY...",
-    "multiaddr": "/ip4/198.51.100.24/tcp/9000/p2p/12D3KooWStZ1...",
-    "latency_ms": 18,
-    "status": "connected",
-    "tag": "validator-frankfurt"
-  },
-  {
-    "peer_id": "12D3KooWNx9Bv3T4qL2eR...",
-    "multiaddr": "/ip4/203.0.113.88/tcp/9000/p2p/12D3KooWNx9B...",
-    "latency_ms": 32,
-    "status": "connected",
-    "tag": "sentry-singapore"
-  }
-]</div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-peers"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ENDPOINT 2: POST /add-peer -->
-      <div class="opblock post" id="opblock-post-add-peer">
-        <div class="opblock-summary" onclick="toggleOpblock('opblock-post-add-peer')">
-          <span class="opblock-summary-method">POST</span>
-          <span class="opblock-summary-path">/add-peer</span>
-          <span class="opblock-summary-description">Dial and connect a new network peer</span>
+      <!-- ================== 2. PENDING REQUESTS ================== -->
+      <div class="opblock get" id="opblock-requests">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-requests')">
+          <span class="opblock-summary-method" style="background-color: #61affe;">GET</span>
+          <span class="opblock-summary-path">/p2p/requests</span>
+          <span class="opblock-summary-description">Get list of pending join requests</span>
           <span class="opblock-summary-arrow">▼</span>
         </div>
-
-        <div class="opblock-body">
-          <div class="opblock-section-header">
-            <span class="opblock-title">Parameters & Request Body</span>
+        <div class="opblock-body hidden">
+          <div style="padding: 15px; font-size: 13px; color: var(--text-muted); font-style: italic;">
+            No input parameters required. Click Execute to fetch pending requests.
           </div>
+          <div class="execute-wrapper">
+            <button class="btn-execute" onclick="executePeers('REQUESTS')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('requests')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-requests" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-requests"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
+      <!-- ================== 3. JOIN NETWORK ================== -->
+      <div class="opblock post" id="opblock-join">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-join')">
+          <span class="opblock-summary-method" style="background-color: #49cc90;">POST</span>
+          <span class="opblock-summary-path">/p2p/join</span>
+          <span class="opblock-summary-description">Request to join a target node</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
           <table class="parameters-table">
-            <thead>
-              <tr>
-                <th style="width: 200px;">Parameter</th>
-                <th>Value</th>
-              </tr>
-            </thead>
             <tbody>
               <tr>
                 <td>
@@ -188,140 +157,95 @@
                   <div class="param-type">string (body)</div>
                 </td>
                 <td>
-                  <input type="text" id="input-add-peer-address" class="form-control mono" value="/ip4/192.0.2.146/tcp/9000/p2p/12D3KooWTestPeerId" placeholder="/ip4/x.x.x.x/tcp/9000/p2p/..." />
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="param-name">pubkey</div>
-                  <div class="param-type">string (body)</div>
-                </td>
-                <td>
-                  <input type="text" id="input-add-peer-pubkey" class="form-control mono" placeholder="0x9a8f... (Optional Ed25519 identity key)" />
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="param-name">tag</div>
-                  <div class="param-type">string (body)</div>
-                </td>
-                <td>
-                  <input type="text" id="input-add-peer-tag" class="form-control" value="bootnode-us-east" />
+                  <input type="text" id="input-join-address" class="form-control mono" placeholder="e.g. 192.168.1.10:9000" required />
                 </td>
               </tr>
             </tbody>
           </table>
-
           <div class="execute-wrapper">
-            <button class="btn-execute post-btn" onclick="executeAddPeer()">Execute</button>
-            <button class="btn-clear" onclick="clearResponses('add-peer')">Clear</button>
+            <button class="btn-execute post-btn" onclick="executePeers('JOIN', true)">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('join')">Clear</button>
           </div>
-
-          <!-- Responses -->
-          <div class="responses-wrapper" id="responses-add-peer" style="display: none;">
+          <div class="responses-wrapper" id="responses-join" style="display: none;">
             <div class="response-block">
-              <div class="response-label">Responses</div>
-              <table class="parameters-table">
-                <thead>
-                  <tr>
-                    <th style="width: 100px;">Code</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><span class="status-code-badge status-200" id="status-add-peer">200</span></td>
-                    <td>
-                      <div class="response-label">Curl</div>
-                      <div class="code-box" id="curl-add-peer"></div>
-                      
-                      <div class="response-label" style="margin-top: 10px;">Response body</div>
-                      <div class="code-box" id="body-add-peer"></div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-join"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ENDPOINT 3: POST /remove-peer -->
-      <div class="opblock post" id="opblock-post-remove-peer">
-        <div class="opblock-summary" onclick="toggleOpblock('opblock-post-remove-peer')">
-          <span class="opblock-summary-method">POST</span>
-          <span class="opblock-summary-path">/remove-peer</span>
-          <span class="opblock-summary-description">Disconnect and prune peer from routing table</span>
+      <!-- ================== 4. APPROVE PEER ================== -->
+      <div class="opblock post" id="opblock-approve">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-approve')">
+          <span class="opblock-summary-method" style="background-color: #49cc90;">POST</span>
+          <span class="opblock-summary-path">/p2p/approve</span>
+          <span class="opblock-summary-description">Approve a pending join request</span>
           <span class="opblock-summary-arrow">▼</span>
         </div>
-
-        <div class="opblock-body">
-          <div class="opblock-section-header">
-            <span class="opblock-title">Parameters & Request Body</span>
-          </div>
-
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
           <table class="parameters-table">
-            <thead>
-              <tr>
-                <th style="width: 200px;">Parameter</th>
-                <th>Value</th>
-              </tr>
-            </thead>
             <tbody>
               <tr>
                 <td>
-                  <div class="param-name">peer_id <span class="param-required">* required</span></div>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
                   <div class="param-type">string (body)</div>
                 </td>
                 <td>
-                  <select id="input-remove-peer-id" class="form-control mono">
-                    <!-- Populated dynamically -->
-                  </select>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <div class="param-name">reason</div>
-                  <div class="param-type">string (body)</div>
-                </td>
-                <td>
-                  <input type="text" id="input-remove-reason" class="form-control" value="Manual administrator prune" />
+                  <input type="text" id="input-approve-address" class="form-control mono" placeholder="Endpoint to approve..." required />
                 </td>
               </tr>
             </tbody>
           </table>
-
           <div class="execute-wrapper">
-            <button class="btn-execute post-btn" onclick="executeRemovePeer()">Execute</button>
-            <button class="btn-clear" onclick="clearResponses('remove-peer')">Clear</button>
+            <button class="btn-execute post-btn" onclick="executePeers('APPROVE', true)">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('approve')">Clear</button>
           </div>
-
-          <!-- Responses -->
-          <div class="responses-wrapper" id="responses-remove-peer" style="display: none;">
+          <div class="responses-wrapper" id="responses-approve" style="display: none;">
             <div class="response-block">
-              <div class="response-label">Responses</div>
-              <table class="parameters-table">
-                <thead>
-                  <tr>
-                    <th style="width: 100px;">Code</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><span class="status-code-badge status-200" id="status-remove-peer">200</span></td>
-                    <td>
-                      <div class="response-label">Response body</div>
-                      <div class="code-box" id="body-remove-peer"></div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-approve"></div>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- ================== 5. LEAVE / REMOVE PEER ================== -->
+      <!-- <div class="opblock delete" id="opblock-leave">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-leave')">
+          <span class="opblock-summary-method" style="background-color: #f93e3e;">POST</span>
+          <span class="opblock-summary-path">/p2p/leave</span>
+          <span class="opblock-summary-description">Remove a peer or leave network</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
+          <table class="parameters-table">
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-leave-address" class="form-control mono" placeholder="Endpoint to disconnect..." required />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="execute-wrapper">
+            <button class="btn-execute delete-btn" style="background-color: #f93e3e; border-color: #f93e3e;" onclick="executePeers('LEAVE', 'input-leave-address', 'responses-leave')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('leave')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-leave" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-leave"></div>
+            </div>
+          </div>
+        </div>
+      </div> -->
     </div>
 
     <!-- ==========================================================================

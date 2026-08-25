@@ -1,11 +1,28 @@
 package contract
 
 import (
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"khoai-chain/internal/core"
 	sdk "khoai-chain/pkg/contract"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
+
+type ContractMetadata struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Inputs      []FunctionParameter `json:"inputs"`
+}
+type FunctionParameter struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
 
 type ContractManager struct {
 	contracts     map[string]sdk.SmartContract
@@ -119,4 +136,129 @@ func (cm *ContractManager) AddAndCheckMine(tx *core.Transaction) (*core.Block, e
 		return newBlock, nil
 	}
 	return nil, nil
+}
+
+func getChaincodeFiles() ([]string, error) {
+	chaincodesBuildDir := filepath.Join("chaincodes")
+	var validFiles []string
+
+	entries, err := os.ReadDir(chaincodesBuildDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		if strings.HasSuffix(entry.Name(), ".go") {
+			fullPath := filepath.Join(chaincodesBuildDir, entry.Name())
+			validFiles = append(validFiles, fullPath)
+		}
+	}
+
+	return validFiles, nil
+}
+
+func (cm *ContractManager) GetMetadataList() (any, error) {
+	chaincodes, err := getChaincodeFiles()
+	if err == nil {
+		return nil, err
+	}
+	metadata := make(map[string]interface{})
+
+	for _, srcPath := range chaincodes {
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, srcPath, nil, parser.AllErrors)
+		var functions []ContractMetadata
+
+		// 1. Quet AST de tim ten Struct public dau tien lam ten Contract
+		contractName := ""
+		if err == nil {
+			for _, decl := range node.Decls {
+				genDecl, ok := decl.(*ast.GenDecl)
+				if ok && genDecl.Tok == token.TYPE {
+					for _, spec := range genDecl.Specs {
+						typeSpec, ok := spec.(*ast.TypeSpec)
+						if ok && typeSpec.Name.IsExported() {
+							if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+								if contractName == "" {
+									contractName = typeSpec.Name.Name
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback ve ten file neu khong tim thay struct nao
+		if contractName == "" {
+			contractName = strings.TrimSuffix(filepath.Base(srcPath), filepath.Ext(srcPath))
+		}
+
+		if err == nil {
+			for _, decl := range node.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Name == nil {
+					continue
+				}
+
+				fnName := fn.Name.Name
+				if fnName[0] < 'A' || fnName[0] > 'Z' || fnName == "Init" {
+					continue
+				}
+
+				var inputs []FunctionParameter
+				if fn.Type != nil && fn.Type.Params != nil {
+					for _, field := range fn.Type.Params.List {
+						typeName := exprToString(field.Type)
+
+						if len(field.Names) > 0 {
+							for _, name := range field.Names {
+								inputs = append(inputs, FunctionParameter{
+									Name: name.Name,
+									Type: typeName,
+								})
+							}
+						} else {
+							inputs = append(inputs, FunctionParameter{
+								Name: "arg",
+								Type: typeName,
+							})
+						}
+					}
+				}
+
+				functions = append(functions, ContractMetadata{
+					Name:        fnName,
+					Description: fmt.Sprintf("Auto-extracted function %s", fnName),
+					Inputs:      inputs,
+				})
+			}
+		}
+
+		metadata[contractName] = map[string]interface{}{
+			"name":      contractName,
+			"functions": functions,
+		}
+	}
+
+	return json.MarshalIndent(metadata, "", "  ")
+}
+
+func exprToString(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		return exprToString(t.X) + "." + t.Sel.Name
+	case *ast.ArrayType:
+		return "[]" + exprToString(t.Elt)
+	case *ast.StarExpr:
+		return "*" + exprToString(t.X)
+	default:
+		return "unknown"
+	}
 }

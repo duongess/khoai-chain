@@ -482,3 +482,19 @@ func (s *Server) Broadcast(msg string) {
 		}(peer)
 	}
 }
+
+func (s *Server) SendMessageToNode(payload any) (any, error) {
+	msg, err := json.Marshal(payload)
+	responseBytes, err := handleMessage(msg, s, s.Contracts, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+
+	if err := json.Unmarshal(responseBytes, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}

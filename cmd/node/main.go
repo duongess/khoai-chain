@@ -13,6 +13,7 @@ import (
 	"khoai-chain/internal/core"
 	"khoai-chain/internal/database"
 	"khoai-chain/internal/server"
+	"khoai-chain/pkg/cli"
 
 	"khoai-chain/chaincodes"
 )
@@ -65,6 +66,13 @@ func main() {
 	srv := server.NewServer(conf.P2PEndpoint, contractManager)
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
+
+	go func() {
+		err := cli.RunUI(conf, srv)
+		if err != nil {
+			fmt.Printf("HTTP UI Server error: %v\n", err)
+		}
+	}()
 
 	// 5. Block main thread to keep the server running forever
 	select {}

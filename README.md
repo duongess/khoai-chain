@@ -51,6 +51,8 @@ Before you begin, ensure you have the following installed:
 
     It's recommended to add the `dist` directory to your system's `PATH` or move the `khoai` executable to a directory already in your `PATH` (e.g., `/usr/local/bin` on Linux/macOS).
 
+    git ls-files --others --cached --exclude-standard | zip -@ build/dist/khoai-src-test.zip
+
 ## ⚙️ Configuration
 
 The core configuration for your blockchain network is defined in `khoai-config.yaml`.

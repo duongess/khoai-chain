@@ -10,6 +10,8 @@ const (
 	OrgsDir        = "organizations"
 
 	JoinRequestTTL = 5 * 60 // 5 minutes in seconds
+
+	Endpoint = ":9000"
 )
 
 func GetNodesBaseDir(BuildDir string) string {

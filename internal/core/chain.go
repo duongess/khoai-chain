@@ -1,7 +1,6 @@
 package core
 
 import (
-	"encoding/hex"
 	"fmt"
 	"khoai-chain/internal/database"
 	"os"
@@ -53,8 +52,10 @@ func InitBlockchain(db *database.Storage) *Blockchain {
 			fmt.Println("Error reading LastHash:", err)
 			os.Exit(1)
 		}
-		lastHash, _ := hex.DecodeString(string(data))
-		fmt.Printf("Blockchain loaded. LastHash: %x\n", lastHash)
+
+		lastHash = string(data)
+
+		fmt.Printf("Blockchain loaded. LastHash: %s\n", lastHash)
 	}
 
 	return &Blockchain{LastHash: lastHash, DB: db}

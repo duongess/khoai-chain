@@ -2,7 +2,11 @@ package config
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"html/template"
 	"net"
 	"os"
@@ -111,6 +115,17 @@ type MainTemplateData struct {
 	Registrations []string
 }
 
+type FunctionABI struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Inputs      []FunctionParameter `json:"inputs"`
+}
+
+type FunctionParameter struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // GetDefaultBuilderConfig returns a default configuration for the network.
 func GetDefaultBuilderConfig() *BuilderConfig {
 	return &BuilderConfig{
@@ -183,31 +198,6 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 		return fmt.Errorf("error saving identity: %w", err)
 	}
 
-	// New: Copy all chaincode source files to a central build/chaincodes directory
-	if len(cfg.Chaincodes) > 0 {
-		chaincodesBuildDir := filepath.Join(BuildDir, "chaincodes")
-		if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
-			return fmt.Errorf("could not create build/chaincodes directory: %w", err)
-		}
-
-		for _, cc := range cfg.Chaincodes {
-			if cc.Path == "" {
-				continue
-			}
-			srcPath := cc.Path
-			destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
-
-			input, err := os.ReadFile(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
-			}
-
-			if err := os.WriteFile(destPath, input, 0644); err != nil {
-				return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
-			}
-		}
-	}
-
 	// 2. Generate organization.yaml (contains only this org's config)
 	orgYAML, err := yaml.Marshal(org)
 	if err != nil {
@@ -268,11 +258,6 @@ func GenerateOrganizationArtifacts(orgDir string, org OrganizationConfig, cfg *B
 
 // GenerateNodeArtifacts creates the config.yaml, Dockerfile, and main.go for a single node.
 func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
-	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(BuildDir, ".version"))
-	if err != nil {
-		return err
-	}
-
 	// Collect all peer endpoints from the main builder config
 	var allPeerEndpoints []string
 	for _, otherOrg := range cfg.Organizations {
@@ -301,7 +286,6 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	httpPort := "9000"
 
 	finalConfig := ConfigContent{
 		NodeName:     uniqueNodeName,
@@ -312,8 +296,6 @@ func GenerateNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org Organizat
 	finalConfig.Organization = org.DisplayName
 	finalConfig.NodeID = node.ID
 	finalConfig.DisplayName = node.DisplayName
-	finalConfig.HTTPListenEndpoint = fmt.Sprintf("0.0.0.0:%s", httpPort)
-	finalConfig.HTTPEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, httpPort)
 	finalConfig.P2PListenEndpoint = fmt.Sprintf("0.0.0.0:%s", p2pPort)
 	finalConfig.P2PEndpoint = fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort)
 	finalConfig.Permission = org.Permission
@@ -342,7 +324,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc "build/". Goi truc tiep den dist/
-COPY dist/{{.SourceArchive}} ./src.zip
+COPY dist/khoai-src-*.zip ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -359,19 +341,17 @@ COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.HTTPPort}} {{.P2PPort}}
+EXPOSE {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"HTTPPort":      httpPort,
-		"P2PPort":       p2pPort,
-		"ImageBase":     cfg.Docker.ImageBase,
-		"OrgName":       sanitize(org.DisplayName),
-		"NodeID":        node.ID,
-		"SourceArchive": sourceArchive,
+		"P2PPort":   p2pPort,
+		"ImageBase": cfg.Docker.ImageBase,
+		"OrgName":   sanitize(org.DisplayName),
+		"NodeID":    node.ID,
 	}
 
 	t, _ := template.New("dockerfile").Parse(dockerfileTmpl)
@@ -386,31 +366,22 @@ CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yam
 // GenerateWorkspaceNodeArtifacts creates artifacts for a node within a workspace context.
 // The key difference is the Dockerfile paths, which are relative to the workspace root.
 func GenerateWorkspaceNodeArtifacts(nodeDir string, node RuntimeNodeConfig, org OrganizationConfig, cfg *BuilderConfig, uniqueNodeName string) error {
-	workspaceDir := filepath.Dir(filepath.Dir(nodeDir))
-	sourceArchive, err := sourceArchiveFromVersionFile(filepath.Join(workspaceDir, ".version"))
-	if err != nil {
-		return err
-	}
-
 	// A. Generate config.yaml for this node (to be included in the Image)
 	_, p2pPort, err := net.SplitHostPort(node.Endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid endpoint format for node %s: %s", node.ID, node.Endpoint)
 	}
-	httpPort := "9000"
 
 	finalConfig := ConfigContent{
-		NodeName:           uniqueNodeName,
-		DBPath:             "/app/data",
-		Organization:       org.DisplayName,
-		NodeID:             node.ID,
-		DisplayName:        node.DisplayName,
-		HTTPListenEndpoint: fmt.Sprintf("0.0.0.0:%s", httpPort),
-		HTTPEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, httpPort),
-		P2PListenEndpoint:  fmt.Sprintf("0.0.0.0:%s", p2pPort),
-		P2PEndpoint:        fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
-		Permission:         org.Permission,
-		IdentityPath:       "/app/identity",
+		NodeName:          uniqueNodeName,
+		DBPath:            "/app/data",
+		Organization:      org.DisplayName,
+		NodeID:            node.ID,
+		DisplayName:       node.DisplayName,
+		P2PListenEndpoint: fmt.Sprintf("0.0.0.0:%s", p2pPort),
+		P2PEndpoint:       fmt.Sprintf("%s:%s", uniqueNodeName, p2pPort),
+		Permission:        org.Permission,
+		IdentityPath:      "/app/identity",
 	}
 
 	configContent, err := yaml.Marshal(finalConfig)
@@ -437,7 +408,7 @@ WORKDIR /app
 RUN apk add --no-cache unzip
 
 # Build context hien tai la thu muc workspace. Goi truc tiep den dist/
-COPY dist/{{.SourceArchive}} ./src.zip
+COPY dist/khoai-src-*.zip ./src.zip
 
 # Giai nen code vao /app va xoa zip de toi uu layer
 RUN unzip src.zip -d . && rm src.zip
@@ -454,18 +425,16 @@ COPY chaincodes/ ./chaincodes/
 
 # Tao thu muc luu tru va mo port
 RUN mkdir -p /app/data
-EXPOSE {{.HTTPPort}} {{.P2PPort}}
+EXPOSE {{.P2PPort}}
 
 # Khoi chay node
 CMD ["go", "run", "./cmd/node/main.go", "--config", "/app/node-config/config.yaml"]
 `
 	// Template data
 	data := map[string]interface{}{
-		"NodeID":        node.ID,
-		"HTTPPort":      httpPort,
-		"P2PPort":       p2pPort,
-		"ImageBase":     cfg.Docker.ImageBase,
-		"SourceArchive": sourceArchive,
+		"NodeID":    node.ID,
+		"P2PPort":   p2pPort,
+		"ImageBase": cfg.Docker.ImageBase,
 	}
 
 	t, _ := template.New("dockerfile-workspace").Parse(dockerfileTmpl)
@@ -558,7 +527,6 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.P2PPort}}:{{.P2PPort}}"
-      - "{{.HTTPPort}}:9000"
     expose:
       - "{{.P2PPort}}"
       - "9000"
@@ -641,7 +609,6 @@ services:
     container_name: {{.Name}}
     ports:
       - "{{.P2PPort}}:{{.P2PPort}}"
-      - "{{.HTTPPort}}:9000"
     expose:
       - "{{.P2PPort}}"
       - "9000"
@@ -675,7 +642,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
@@ -738,14 +704,7 @@ func main() {
 	srv.ConfigurePersistence(conf, *configPathFlag)
 	go srv.Start()
 
-	// 6. Initialize HTTP Control Plane
-	// The HTTP server exposes API endpoints for node management (/join, /peers, etc.).
-	fmt.Printf("HTTP API server listening on %s\n", conf.HTTPListenEndpoint)
-	go func() {
-		_ = http.ListenAndServe(conf.HTTPListenEndpoint, srv)
-	}()
-
-	// 7. Block main thread to keep the server running forever
+	// 5. Block main thread to keep the server running forever
 	select {}
 }
 	`
@@ -800,4 +759,130 @@ func saveIdentity(keystoreDir string) error {
 	}
 
 	return nil
+}
+
+func GenContract(cfg *BuilderConfig, abiDir string) error {
+	if len(cfg.Chaincodes) == 0 {
+		return fmt.Errorf("contract file not found.")
+	}
+	chaincodesBuildDir := filepath.Join(abiDir, "chaincodes")
+	if err := os.MkdirAll(chaincodesBuildDir, 0755); err != nil {
+		return fmt.Errorf("could not create build/chaincodes directory: %w", err)
+	}
+	allABIs := make(map[string]interface{})
+
+	for _, cc := range cfg.Chaincodes {
+		if cc.Path == "" {
+			continue
+		}
+		srcPath := cc.Path
+		destPath := filepath.Join(chaincodesBuildDir, filepath.Base(srcPath))
+
+		input, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to read chaincode file %s: %w", srcPath, err)
+		}
+
+		if err := os.WriteFile(destPath, input, 0644); err != nil {
+			return fmt.Errorf("failed to write chaincode file to %s: %w", destPath, err)
+		}
+
+		fset := token.NewFileSet()
+		node, err := parser.ParseFile(fset, srcPath, nil, parser.AllErrors)
+		var functions []FunctionABI
+
+		// 1. Quet AST de tim ten Struct public dau tien lam ten Contract
+		contractName := ""
+		if err == nil {
+			for _, decl := range node.Decls {
+				genDecl, ok := decl.(*ast.GenDecl)
+				if ok && genDecl.Tok == token.TYPE {
+					for _, spec := range genDecl.Specs {
+						typeSpec, ok := spec.(*ast.TypeSpec)
+						if ok && typeSpec.Name.IsExported() {
+							if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+								if contractName == "" {
+									contractName = typeSpec.Name.Name
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback ve ten file neu khong tim thay struct nao
+		if contractName == "" {
+			contractName = strings.TrimSuffix(filepath.Base(cc.Path), filepath.Ext(cc.Path))
+		}
+
+		if err == nil {
+			for _, decl := range node.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Name == nil {
+					continue
+				}
+
+				fnName := fn.Name.Name
+				if fnName[0] < 'A' || fnName[0] > 'Z' || fnName == "Init" {
+					continue
+				}
+
+				var inputs []FunctionParameter
+				if fn.Type != nil && fn.Type.Params != nil {
+					for _, field := range fn.Type.Params.List {
+						typeName := exprToString(field.Type)
+
+						if len(field.Names) > 0 {
+							for _, name := range field.Names {
+								inputs = append(inputs, FunctionParameter{
+									Name: name.Name,
+									Type: typeName,
+								})
+							}
+						} else {
+							inputs = append(inputs, FunctionParameter{
+								Name: "arg",
+								Type: typeName,
+							})
+						}
+					}
+				}
+
+				functions = append(functions, FunctionABI{
+					Name:        fnName,
+					Description: fmt.Sprintf("Auto-extracted function %s", fnName),
+					Inputs:      inputs,
+				})
+			}
+		}
+
+		allABIs[contractName] = map[string]interface{}{
+			"name":      contractName,
+			"functions": functions,
+		}
+	}
+
+	jsonBytes, err := json.MarshalIndent(allABIs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal ABIs: %w", err)
+	}
+
+	outputFile := filepath.Join(abiDir, "contracts_abi.json")
+	return os.WriteFile(outputFile, jsonBytes, 0644)
+}
+
+func exprToString(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		return exprToString(t.X) + "." + t.Sel.Name
+	case *ast.ArrayType:
+		return "[]" + exprToString(t.Elt)
+	case *ast.StarExpr:
+		return "*" + exprToString(t.X)
+	default:
+		return "unknown"
+	}
 }

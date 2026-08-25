@@ -11,6 +11,12 @@ const (
 	MsgNonce       = "NONCE"
 	MsgTransaction = "TRANSACTION"
 	MsgHeight      = "HEIGHT"
+
+	MsgJoin     = "JOIN"
+	MsgRequests = "REQUESTS"
+	MsgApprove  = "APPROVE"
+	MsgLeave    = "LEAVE"
+	MsgPeers    = "PEERS"
 )
 
 // Request gửi qua TCP
@@ -70,9 +76,16 @@ type CommandHeight struct {
 	Type string `json:"type"`
 }
 
+type CommandPeer struct {
+	Type    string `json:"type"`
+	Sender  string `json:"sender"`
+	Address string `json:"address"`
+}
+
 // Response returned to Client
 type ResponseMessage struct {
 	Status string `json:"status"`
-	Result string `json:"result"`
+	TxId   string `json:"tx_id,omitempty"`
+	Result any    `json:"result"`
 	Error  string `json:"error,omitempty"`
 }

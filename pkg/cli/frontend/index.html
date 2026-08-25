@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khoai-Chain - Node Commander & Contract API</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Open+Sans:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Modular Stylesheet -->
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+
+  <!-- ==========================================================================
+       KHOAI-CHAIN TOP NAVIGATION BAR
+       ========================================================================== -->
+  <header class="topbar">
+    <div class="topbar-wrapper">
+      <a href="#" class="topbar-logo" onclick="event.preventDefault()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" fill="#009688"/>
+          <path d="M12 4L6 14H11L10 20L18 10H13L14 4H12Z" fill="white"/>
+        </svg>
+        <span>Khoai-Chain</span>
+      </a>
+
+      <div class="topbar-actions">
+        <button class="theme-toggle-btn" onclick="toggleTheme()">
+          <span id="theme-icon">🌓</span>
+          <span id="theme-text">Dark Mode</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       KHOAI-CHAIN SWAGGER UI MAIN CONTAINER
+       ========================================================================== -->
+  <div class="swagger-ui">
+    
+    <!-- Info Section -->
+    <div class="info-section">
+      <div class="info-header">
+        <h1 class="info-title">Node Commander API</h1>
+        <span class="info-version">0.1.0</span>
+        <span class="info-oas">OAS 3.1.0</span>
+      </div>
+      <p class="info-description">
+        Developer-focused Khoai-Chain documentation interface for Node Peer Management and ABI-driven Smart Contract interactions secured with <strong>Ed25519 Cryptographic Signatures</strong>.
+      </p>
+    </div>
+
+    <!-- Server & Authorize Bar -->
+    <div class="server-and-auth-bar">
+      <div class="server-selector-group">
+        <span class="server-label">Servers</span>
+        <span class="server-badge" id="target-node-display"></span>
+      </div>
+
+      <div>
+        <button id="auth-btn" class="btn-authorize" onclick="openAuthModal()">
+          <span id="auth-lock-icon">🔒</span>
+          <span id="auth-btn-text">Authorize</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tag Filter Tabs (Peers / Contracts) -->
+    <div class="tag-tabs">
+      <button class="tag-tab-btn" id="tab-peers" onclick="filterTag('peers')">
+        peers
+      </button>
+      <button class="tag-tab-btn" id="tab-contracts" onclick="filterTag('contracts')">
+        contracts
+      </button>
+    </div>
+
+    <!-- ==========================================================================
+         TAG SECTION: PEERS
+         ========================================================================== -->
+    <div class="opblock-tag-section" id="section-peers">
+      <div class="opblock-tag-header">
+        <div class="opblock-tag-title">
+          <span>peers</span>
+        </div>
+        <div class="opblock-tag-desc">Node mesh discovery, peer connection, and multiaddr routing</div>
+      </div>
+      <!-- ================== 1. GET PEERS ================== -->
+      <div class="opblock get" id="opblock-peers">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-peers')">
+          <span class="opblock-summary-method" style="background-color: #61affe;">GET</span>
+          <span class="opblock-summary-path">/p2p/peers</span>
+          <span class="opblock-summary-description">Get list of connected network peers</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div style="padding: 15px; font-size: 13px; color: var(--text-muted); font-style: italic;">
+            No input parameters required. Returns current active peer routing table.
+          </div>
+          <div class="execute-wrapper">
+            <button class="btn-execute" onclick="executePeers('PEERS')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('peers')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-peers" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-peers"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================== 2. PENDING REQUESTS ================== -->
+      <div class="opblock get" id="opblock-requests">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-requests')">
+          <span class="opblock-summary-method" style="background-color: #61affe;">GET</span>
+          <span class="opblock-summary-path">/p2p/requests</span>
+          <span class="opblock-summary-description">Get list of pending join requests</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div style="padding: 15px; font-size: 13px; color: var(--text-muted); font-style: italic;">
+            No input parameters required. Click Execute to fetch pending requests.
+          </div>
+          <div class="execute-wrapper">
+            <button class="btn-execute" onclick="executePeers('REQUESTS')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('requests')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-requests" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-requests"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================== 3. JOIN NETWORK ================== -->
+      <div class="opblock post" id="opblock-join">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-join')">
+          <span class="opblock-summary-method" style="background-color: #49cc90;">POST</span>
+          <span class="opblock-summary-path">/p2p/join</span>
+          <span class="opblock-summary-description">Request to join a target node</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
+          <table class="parameters-table">
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-join-address" class="form-control mono" placeholder="e.g. 192.168.1.10:9000" required />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executePeers('JOIN', true)">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('join')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-join" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-join"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================== 4. APPROVE PEER ================== -->
+      <div class="opblock post" id="opblock-approve">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-approve')">
+          <span class="opblock-summary-method" style="background-color: #49cc90;">POST</span>
+          <span class="opblock-summary-path">/p2p/approve</span>
+          <span class="opblock-summary-description">Approve a pending join request</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
+          <table class="parameters-table">
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-approve-address" class="form-control mono" placeholder="Endpoint to approve..." required />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executePeers('APPROVE', true)">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('approve')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-approve" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-approve"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================== 5. LEAVE / REMOVE PEER ================== -->
+      <!-- <div class="opblock delete" id="opblock-leave">
+        <div class="opblock-summary" onclick="toggleOpblock('opblock-leave')">
+          <span class="opblock-summary-method" style="background-color: #f93e3e;">POST</span>
+          <span class="opblock-summary-path">/p2p/leave</span>
+          <span class="opblock-summary-description">Remove a peer or leave network</span>
+          <span class="opblock-summary-arrow">▼</span>
+        </div>
+        <div class="opblock-body hidden">
+          <div class="opblock-section-header"><span class="opblock-title">Parameters</span></div>
+          <table class="parameters-table">
+            <tbody>
+              <tr>
+                <td>
+                  <div class="param-name">address <span class="param-required">* required</span></div>
+                  <div class="param-type">string (body)</div>
+                </td>
+                <td>
+                  <input type="text" id="input-leave-address" class="form-control mono" placeholder="Endpoint to disconnect..." required />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="execute-wrapper">
+            <button class="btn-execute delete-btn" style="background-color: #f93e3e; border-color: #f93e3e;" onclick="executePeers('LEAVE', 'input-leave-address', 'responses-leave')">Execute</button>
+            <button class="btn-clear" onclick="clearResponses('leave')">Clear</button>
+          </div>
+          <div class="responses-wrapper" id="responses-leave" style="display: none;">
+            <div class="response-block">
+              <div class="response-label" style="margin-top: 10px;">Response body</div>
+              <div class="code-box" id="body-leave"></div>
+            </div>
+          </div>
+        </div>
+      </div> -->
+    </div>
+
+    <!-- ==========================================================================
+         TAG SECTION: CONTRACTS
+         ========================================================================== -->
+    <div class="opblock-tag-section" id="section-contracts">
+      <div class="opblock-tag-header">
+        <div class="opblock-tag-title">
+          <span>contracts</span>
+        </div>
+        <div class="opblock-tag-desc">Smart contract execution, ABI dynamic forms, and Ed25519 transaction signing</div>
+      </div>
+
+      <div class="opblock post is-open" id="opblock-post-contract-call">
+        <div class="opblock-body">
+          <div class="opblock-section-header">
+            <span class="opblock-title">ABI Contract Selector & Dynamic Schema</span>
+          </div>
+
+          <!-- Contract & Function Pickers -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div>
+              <label style="font-weight: 700; font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">TARGET CONTRACT</label>
+              <select id="contract-select" class="form-control mono" onchange="handleContractChange()">
+                <!-- Populated dynamically from ABIs -->
+              </select>
+            </div>
+            <div>
+              <label style="font-weight: 700; font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">FUNCTION METHOD</label>
+              <select id="function-select" class="form-control mono" onchange="handleFunctionChange()">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic ABI Inputs Table -->
+          <table class="parameters-table">
+            <thead>
+              <tr>
+                <th style="width: 220px;">ABI Parameter</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody id="dynamic-contract-params-body">
+              <!-- Dynamically generated rows based on selected ABI function -->
+            </tbody>
+          </table>
+
+          <div class="execute-wrapper">
+            <button class="btn-execute post-btn" onclick="executeSignAndSendContract()">
+              Sign & Send
+            </button>
+            <button class="btn-clear" onclick="clearResponses('contract-call')">Clear</button>
+          </div>
+
+          <!-- Responses -->
+          <div class="responses-wrapper" id="responses-contract-call" style="display: none;">
+            <div class="response-block">
+              <div class="response-label">Responses</div>
+              <table class="parameters-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Code</th>
+                    <th>Execution Result & TxReceipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="status-code-badge status-200" id="status-contract-call">200</span></td>
+                    <td>
+                      <div class="response-label">Request Payload (Ed25519 Signed)</div>
+                      <div class="code-box" id="payload-contract-call"></div>
+
+                      <div class="response-label" style="margin-top: 10px;">Server Response Body</div>
+                      <div class="code-box" id="body-contract-call"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==========================================================================
+         KHOAI-CHAIN LOG / FEEDBACK CONSOLE
+         ========================================================================== -->
+    <div class="console-dock">
+      <div class="console-header">
+        <span>CONSOLE OUTPUT / LOG STREAM</span>
+        <button onclick="clearTerminalLogs()" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 11px;">
+          Clear Logs
+        </button>
+      </div>
+      <div class="console-logs" id="console-logs">
+        <!-- Live logs printed here -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==========================================================================
+       KHOAI-CHAIN SWAGGER AUTHORIZATION MODAL (Ed25519)
+       ========================================================================== -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="swagger-modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Available authorizations</h3>
+        <button class="modal-close" onclick="closeAuthModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="auth-scope-box">
+          <div class="auth-scope-title">Ed25519KeyAuth (apiKey / Cryptographic Signature)</div>
+          <div class="auth-scope-desc">
+            Provide your Ed25519 public and private keypair to sign node RPC transactions and authenticate calls.
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: var(--text-dark);">
+              ed25519_public_key <span style="color: #f93e3e;">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="modal-pubkey" 
+              class="form-control mono" 
+              placeholder="0x8a92f0853bb4d6438816f1fc4ecf9cc874291823... (64 hex)"
+            />
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: var(--text-dark);">
+              ed25519_private_key <span style="color: #f93e3e;">*</span>
+            </label>
+            <input 
+              type="password" 
+              id="modal-privkey" 
+              class="form-control mono" 
+              placeholder="0x6e8bc31f9d45e03947ca79116e0129bc48102938... (64 or 128 hex)"
+            />
+          </div>
+
+          <button class="btn-clear" style="font-size: 12px;" onclick="generateDemoKeypair()">
+            ⚡ Generate Demo Ed25519 Keypair
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-clear" onclick="logoutAuth()">Logout</button>
+        <button class="btn-execute post-btn" style="padding: 8px 24px;" onclick="saveAuthModal()">Authorize</button>
+        <button class="btn-clear" onclick="closeAuthModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main ES Module Script -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

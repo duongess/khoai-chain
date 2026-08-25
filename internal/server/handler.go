@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"khoai-chain/internal/contract"
 	"khoai-chain/internal/core" // Import để dùng struct Block nếu cần
+	"net"
 	"time"
 )
 
@@ -57,6 +58,26 @@ func HandleBlockSend(newBlock *core.Block) CommandNewBlock {
 	blockMsg.Signature = hex.EncodeToString(sig)
 
 	return blockMsg
+}
+
+func isLocalConnection(peer *Peer) bool {
+	if peer == nil || peer.Conn == nil {
+		return true
+	}
+	host, _, err := net.SplitHostPort(peer.Conn.RemoteAddr().String())
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	if ip.IsLoopback() {
+		return true
+	}
+
+	return ip.IsPrivate()
 }
 
 // genericMessage là một cấu trúc chung chỉ để lấy ra trường 'type' từ JSON.
@@ -132,7 +153,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		} else if errContract != nil {
 			resp = ResponseMessage{Status: "Error", Error: errContract.Error()}
 		} else {
-			resp = ResponseMessage{Status: "Success", Result: string(result)}
+			resp = ResponseMessage{Status: "Success", TxId: tx.ID, Result: result}
 			if minedBlock == nil {
 				// tx is still pending — gossip it so peers' mempools stay in sync
 				s.BroadcastNewTransaction(tx)
@@ -317,7 +338,7 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		if err != nil {
 			return errorResponse(baseMsg.Type, err.Error())
 		}
-
+		manager.StagingState = make(map[string][]byte)
 		for _, transaction := range msg.Block.Transactions {
 			pubKeyBytes, err := hex.DecodeString(transaction.Payload.Sender)
 			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
@@ -352,6 +373,96 @@ func handleMessage(payload []byte, s *Server, manager *contract.ContractManager,
 		manager.Mempool.RemoveIncluded(msg.Block.Transactions)
 
 		return json.Marshal(ResponseMessage{Status: "Success"})
+
+	case MsgJoin:
+		// MsgJoin phai mo cho peer ben ngoai goi vao
+		var msg CommandPeer
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+
+		sourceEndpoint := msg.Address
+		if sourceEndpoint == "" {
+			sourceEndpoint = msg.Sender
+		}
+
+		s.addPendingJoin(sourceEndpoint)
+
+		resp := ResponseMessage{
+			Status: "Success",
+			Result: fmt.Sprintf("Join request from %s is waiting for approval.", sourceEndpoint),
+		}
+		return json.Marshal(resp)
+
+	case MsgRequests:
+		// Chi cho phep goi tu chinh may dang chay node
+		if !isLocalConnection(peer) {
+			resp := ResponseMessage{Status: "Error", Error: "Unauthorized: Local access only"}
+			return json.Marshal(resp)
+		}
+
+		var msg CommandPeer
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+
+		pendingEndpoints := make([]string, 0, len(s.PendingJoins))
+		for endpoint := range s.PendingJoins {
+			pendingEndpoints = append(pendingEndpoints, endpoint)
+		}
+
+		resultBytes, _ := json.Marshal(pendingEndpoints)
+		resp := ResponseMessage{Status: "Success", Result: string(resultBytes)}
+		return json.Marshal(resp)
+
+	case MsgApprove:
+		// Chi cho phep chu node tu approve
+		if !isLocalConnection(peer) {
+			resp := ResponseMessage{Status: "Error", Error: "Unauthorized: Local access only"}
+			return json.Marshal(resp)
+		}
+
+		var msg CommandPeer
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+
+		sourceEndpoint := msg.Address
+		if !s.approvePendingJoin(sourceEndpoint) {
+			resp := ResponseMessage{Status: "Error", Error: "Join request not found or expired"}
+			return json.Marshal(resp)
+		}
+
+		go s.ConnectAndSync(sourceEndpoint)
+		s.persistPeer(sourceEndpoint)
+
+		resp := ResponseMessage{
+			Status: "Success",
+			Result: fmt.Sprintf("Join process approved for %s", sourceEndpoint),
+		}
+		return json.Marshal(resp)
+
+	case MsgPeers:
+		// Chi local moi duoc xem danh sach peer
+		if !isLocalConnection(peer) {
+			resp := ResponseMessage{Status: "Error", Error: "Unauthorized: Local access only"}
+			return json.Marshal(resp)
+		}
+
+		var msg CommandPeer
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			resp := ResponseMessage{Status: "Error", Error: "Invalid JSON"}
+			return json.Marshal(resp)
+		}
+
+		peerList := s.GetPeerList()
+		resultBytes, _ := json.Marshal(peerList)
+
+		resp := ResponseMessage{Status: "Success", Result: string(resultBytes)}
+		return json.Marshal(resp)
 	}
 
 	errResp := ResponseMessage{Status: "Error", Error: "Unknown command"}

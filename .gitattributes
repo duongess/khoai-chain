@@ -5,6 +5,7 @@ tests/ export-ignore
 docs/ export-ignore
 cmd/ export-ignore
 chaincodes/ export-ignore
+pkg/cli export-ignore
 README.md export-ignore
 LICENSE export-ignore
 builder.go export-ignore

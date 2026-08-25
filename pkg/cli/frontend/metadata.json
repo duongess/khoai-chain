@@ -1,0 +1,6 @@
+{
+  "name": "Node Commander - Ed25519 Web3 Node & Contract CLI",
+  "description": "Developer-focused minimalist SPA for node peer management and ABI-driven contract interaction with Ed25519 authentication and live console logging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
